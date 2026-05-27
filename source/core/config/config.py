@@ -25,6 +25,10 @@ class AppConfig:
     secretKey: str = "change-me"
     setupKey: str = ""
     jwtExpiresHours: int = 12
+    storageMode: str = "local"
+    storageRoot: str = "storage"
+    publicBaseUrl: str = "http://127.0.0.1:8080"
+    messageMode: str = "log"
 
 
 appConfig = AppConfig()
@@ -51,6 +55,10 @@ def load_runtime_config() -> None:
         "JURISFLOW_SECRET_KEY": os.getenv("JURISFLOW_SECRET_KEY"),
         "JURISFLOW_SETUP_KEY": os.getenv("JURISFLOW_SETUP_KEY"),
         "JURISFLOW_JWT_EXPIRES_HOURS": os.getenv("JURISFLOW_JWT_EXPIRES_HOURS"),
+        "JURISFLOW_STORAGE_MODE": os.getenv("JURISFLOW_STORAGE_MODE"),
+        "JURISFLOW_STORAGE_ROOT": os.getenv("JURISFLOW_STORAGE_ROOT"),
+        "JURISFLOW_PUBLIC_BASE_URL": os.getenv("JURISFLOW_PUBLIC_BASE_URL"),
+        "JURISFLOW_MESSAGE_MODE": os.getenv("JURISFLOW_MESSAGE_MODE"),
     }
 
     for key, value in env_map.items():
@@ -69,3 +77,7 @@ def load_runtime_config() -> None:
     appConfig.secretKey = runtime_data.get("JURISFLOW_SECRET_KEY", appConfig.secretKey)
     appConfig.setupKey = runtime_data.get("JURISFLOW_SETUP_KEY", appConfig.setupKey)
     appConfig.jwtExpiresHours = int(runtime_data.get("JURISFLOW_JWT_EXPIRES_HOURS", appConfig.jwtExpiresHours))
+    appConfig.storageMode = runtime_data.get("JURISFLOW_STORAGE_MODE", appConfig.storageMode)
+    appConfig.storageRoot = runtime_data.get("JURISFLOW_STORAGE_ROOT", appConfig.storageRoot)
+    appConfig.publicBaseUrl = runtime_data.get("JURISFLOW_PUBLIC_BASE_URL", appConfig.publicBaseUrl).rstrip("/")
+    appConfig.messageMode = runtime_data.get("JURISFLOW_MESSAGE_MODE", appConfig.messageMode)

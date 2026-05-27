@@ -70,3 +70,10 @@ Em producao, prefira `JURISFLOW_DATABASE_URL` fornecida pelo PostgreSQL do Railw
 3. Aplicar o schema com `python database/apply_schema.py`.
 4. Subir a API com `python app.py`.
 5. Rodar smoke test com `python tests/smoke_api.py`.
+
+## Recursos operacionais incluidos
+
+- upload local de documentos via `POST /api/v1/documents/upload`
+- download local de arquivos via `GET /api/v1/files/<stored_name>`
+- geracao de documento por template com persistencia opcional
+- envio de mensagens em modo `log` para validacao sem provedor externo

@@ -60,6 +60,8 @@ Headers:
 ```json
 {
   "template_id": "uuid-do-template",
+  "persist_document": true,
+  "filename": "procuracao-demo.html",
   "context": {
     "client": {
       "name": "Cliente Exemplo"
@@ -68,6 +70,19 @@ Headers:
       "name": "Demo Legal"
     }
   }
+}
+```
+
+## Upload local de documento
+
+`POST /api/v1/documents/upload`
+
+```json
+{
+  "title": "Contrato social",
+  "filename": "contrato-social.txt",
+  "content_base64": "Q29udGV1ZG8gZGUgdGVzdGU=",
+  "file_type": "text/plain"
 }
 ```
 

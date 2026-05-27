@@ -29,3 +29,13 @@ def test_about_endpoint():
     payload = response.get_json()
     assert payload["status"] is True
     assert "auth" in payload["data"]["modules"]
+
+
+def test_conventions_endpoint():
+    client = app.test_client()
+    response = client.get("/api/v1/conventions")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] is True
+    assert payload["data"]["deploy_target"] == "Railway"
