@@ -23,6 +23,25 @@ Body:
 }
 ```
 
+## Cadastro publico de escritorio
+
+`POST /api/v1/public/signup`
+
+```json
+{
+  "company_code": "demo-legal",
+  "company_name": "Demo Legal",
+  "company_email": "contato@demolegal.com",
+  "company_phone": "11999999999",
+  "admin_name": "Admin Demo",
+  "admin_email": "admin@demolegal.com",
+  "admin_phone": "11988888888",
+  "admin_password": "Senha@123",
+  "timezone": "America/Sao_Paulo",
+  "locale": "pt-BR"
+}
+```
+
 ## Login
 
 `POST /api/v1/auth/login`
@@ -60,8 +79,6 @@ Headers:
 ```json
 {
   "template_id": "uuid-do-template",
-  "persist_document": true,
-  "filename": "procuracao-demo.html",
   "context": {
     "client": {
       "name": "Cliente Exemplo"
@@ -70,19 +87,6 @@ Headers:
       "name": "Demo Legal"
     }
   }
-}
-```
-
-## Upload local de documento
-
-`POST /api/v1/documents/upload`
-
-```json
-{
-  "title": "Contrato social",
-  "filename": "contrato-social.txt",
-  "content_base64": "Q29udGV1ZG8gZGUgdGVzdGU=",
-  "file_type": "text/plain"
 }
 ```
 

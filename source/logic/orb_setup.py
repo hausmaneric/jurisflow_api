@@ -4,16 +4,7 @@ from source.core.system.security import hash_password
 from source.core.system.utils import NXResult
 
 
-def bootstrap_company(payload: dict, setup_key: str) -> NXResult:
-    r = NXResult()
-    if not appConfig.setupKey:
-        r.make_error(0, "JURISFLOW_SETUP_KEY nao configurada")
-        return r
-
-    if setup_key != appConfig.setupKey:
-        r.make_error(401, "Setup key invalida")
-        return r
-
+def _validate_signup_payload(payload: dict) -> list[str]:
     required_fields = [
         "company_code",
         "company_name",
@@ -21,7 +12,12 @@ def bootstrap_company(payload: dict, setup_key: str) -> NXResult:
         "admin_email",
         "admin_password",
     ]
-    missing = [field for field in required_fields if not payload.get(field)]
+    return [field for field in required_fields if not payload.get(field)]
+
+
+def _provision_company(payload: dict, success_message: str) -> NXResult:
+    r = NXResult()
+    missing = _validate_signup_payload(payload)
     if missing:
         r.make_error(0, f"Campos obrigatorios ausentes: {', '.join(missing)}")
         return r
@@ -127,16 +123,39 @@ def bootstrap_company(payload: dict, setup_key: str) -> NXResult:
 
         nx.conn_nx.commit()
         r.status = True
-        r.message = "Bootstrap inicial concluido com sucesso"
+        r.message = success_message
         r.data = {
             "company_id": str(company["id"]),
             "role_id": str(role["id"]),
             "admin_user_id": str(user["id"]),
+            "company_code": payload["company_code"],
+            "admin_email": payload["admin_email"],
         }
     except Exception as exc:
         nx.conn_nx.rollback()
-        r.make_error(0, "Erro ao executar bootstrap inicial", str(exc))
+        detail = str(exc)
+        if "duplicate" in detail.lower() or "unique" in detail.lower():
+            r.make_error(409, "Ja existe uma conta com esse codigo, e-mail ou documento")
+        else:
+            r.make_error(0, "Erro ao criar conta JurisFlow", detail)
     finally:
         nx.stop()
 
     return r
+
+
+def bootstrap_company(payload: dict, setup_key: str) -> NXResult:
+    r = NXResult()
+    if not appConfig.setupKey:
+        r.make_error(0, "JURISFLOW_SETUP_KEY nao configurada")
+        return r
+
+    if setup_key != appConfig.setupKey:
+        r.make_error(401, "Setup key invalida")
+        return r
+
+    return _provision_company(payload, "Bootstrap inicial concluido com sucesso")
+
+
+def public_signup_company(payload: dict) -> NXResult:
+    return _provision_company(payload, "Conta JurisFlow criada com sucesso")

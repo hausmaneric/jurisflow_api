@@ -1,11 +1,8 @@
 import re
-from pathlib import Path
 
 from source.core.system.database import NXDatabaseConnection
 from source.core.system.utils import NXResult
 from source.logic.orb_audit import register_audit_log
-from source.logic.orb_files import save_binary_file
-from source.logic.orb_messages import dispatch_message
 
 
 PLACEHOLDER_PATTERN = re.compile(r"{{\s*([a-zA-Z0-9_.-]+)\s*}}")
@@ -67,42 +64,15 @@ def generate_document(session_payload: dict, payload: dict) -> NXResult:
             None,
             {"context_keys": list(context.keys())},
         )
-        data = {
+        r.status = True
+        r.message = "Documento gerado com sucesso"
+        r.data = {
             "template_id": str(template["id"]),
             "template_name": template["name"],
             "category": template["category"],
             "file_type": template["file_type"],
             "content": rendered_body,
         }
-        if payload.get("persist_document"):
-            filename = payload.get("filename") or f"{template['name']}.html"
-            stored_name, public_url = save_binary_file(filename, rendered_body.encode("utf-8"))
-            nx.xp_nx.execute(
-                """
-                INSERT INTO documents (company_id, client_id, case_id, uploaded_by, title, file_url, file_type, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id
-                """,
-                (
-                    session_payload["company_id"],
-                    payload.get("client_id"),
-                    payload.get("case_id"),
-                    session_payload.get("user_id"),
-                    payload.get("title") or Path(filename).stem,
-                    public_url,
-                    "text/html",
-                    "active",
-                ),
-            )
-            document = nx.xp_nx.fetchone()
-            nx.conn_nx.commit()
-            data["document_id"] = str(document["id"])
-            data["file_url"] = public_url
-            data["stored_name"] = stored_name
-
-        r.status = True
-        r.message = "Documento gerado com sucesso"
-        r.data = data
     except Exception as exc:
         r.make_error(0, "Erro ao gerar documento", str(exc))
     finally:
@@ -141,7 +111,6 @@ def send_message_from_template(session_payload: dict, payload: dict) -> NXResult
 
         rendered_subject = _replace_placeholders(template["subject"] or "", context)
         rendered_body = _replace_placeholders(template["body"], context)
-        delivery = dispatch_message(payload.get("channel") or template["channel"], recipient, rendered_subject, rendered_body)
         nx.xp_nx.execute(
             """
             INSERT INTO messages (company_id, client_id, case_id, template_id, channel, recipient, subject, body, status, sent_at, created_by)
@@ -157,7 +126,7 @@ def send_message_from_template(session_payload: dict, payload: dict) -> NXResult
                 recipient,
                 rendered_subject,
                 rendered_body,
-                delivery["status"],
+                "sent",
                 session_payload.get("user_id"),
             ),
         )
@@ -180,8 +149,7 @@ def send_message_from_template(session_payload: dict, payload: dict) -> NXResult
             "recipient": recipient,
             "subject": rendered_subject,
             "body": rendered_body,
-            "status": delivery["status"],
-            "delivery": delivery,
+            "status": "sent",
         }
     except Exception as exc:
         nx.conn_nx.rollback()

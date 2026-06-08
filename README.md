@@ -31,6 +31,7 @@ As pastas abaixo existem para manter o mesmo padrao estrutural do projeto de ref
 - `GET /api/v1/conventions`
 - `GET /api/v1/environment`
 - `GET /api/v1/about`
+- `POST /api/v1/public/signup`
 - `POST /api/v1/setup/bootstrap`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
@@ -62,18 +63,3 @@ As pastas abaixo existem para manter o mesmo padrao estrutural do projeto de ref
 - `.env.example`: variaveis recomendadas
 
 Em producao, prefira `JURISFLOW_DATABASE_URL` fornecida pelo PostgreSQL do Railway.
-
-## Operacao inicial
-
-1. Instalar dependencias com `pip install -r requirements.txt`.
-2. Configurar `.env` ou variaveis do Railway.
-3. Aplicar o schema com `python database/apply_schema.py`.
-4. Subir a API com `python app.py`.
-5. Rodar smoke test com `python tests/smoke_api.py`.
-
-## Recursos operacionais incluidos
-
-- upload local de documentos via `POST /api/v1/documents/upload`
-- download local de arquivos via `GET /api/v1/files/<stored_name>`
-- geracao de documento por template com persistencia opcional
-- envio de mensagens em modo `log` para validacao sem provedor externo

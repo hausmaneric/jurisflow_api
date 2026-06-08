@@ -253,6 +253,7 @@ def request_password_reset(payload: dict) -> NXResult:
         r.data = {
             "reset_token": reset_token,
             "expires_at": expires_at.isoformat(),
+            "delivery_mode": "in_app",
         }
     except Exception as exc:
         nx.conn_nx.rollback()

@@ -180,6 +180,74 @@ CREATE TABLE IF NOT EXISTS documents (
     deleted_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS document_versions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    created_by UUID REFERENCES users(id),
+    version_label VARCHAR(60) NOT NULL DEFAULT 'v1',
+    title VARCHAR(180),
+    file_url TEXT NOT NULL,
+    file_type VARCHAR(60),
+    notes TEXT,
+    is_current BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS document_attachments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    uploaded_by UUID REFERENCES users(id),
+    title VARCHAR(180) NOT NULL,
+    file_url TEXT NOT NULL,
+    file_type VARCHAR(60),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS document_signature_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    requester_user_id UUID REFERENCES users(id),
+    signer_name VARCHAR(160) NOT NULL,
+    signer_email VARCHAR(160),
+    signer_document VARCHAR(40),
+    signer_role VARCHAR(80),
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    access_token UUID NOT NULL DEFAULT gen_random_uuid(),
+    sent_at TIMESTAMPTZ,
+    viewed_at TIMESTAMPTZ,
+    signed_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS document_ocr_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id),
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    requested_by UUID REFERENCES users(id),
+    status VARCHAR(30) NOT NULL DEFAULT 'processed',
+    engine VARCHAR(60) NOT NULL DEFAULT 'jurisflow-assisted-ocr',
+    source_file_url TEXT,
+    extracted_text TEXT,
+    reviewed_text TEXT,
+    confidence_score NUMERIC(5,2),
+    extracted_metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id),
@@ -247,6 +315,39 @@ CREATE TABLE IF NOT EXISTS messages (
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS financial_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id),
+    client_id UUID REFERENCES clients(id),
+    case_id UUID REFERENCES cases(id),
+    created_by UUID REFERENCES users(id),
+    entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    description VARCHAR(180) NOT NULL,
+    entry_type VARCHAR(20) NOT NULL DEFAULT 'income',
+    category VARCHAR(80) NOT NULL DEFAULT 'general',
+    account_label VARCHAR(120),
+    amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS message_attachments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id),
+    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    uploaded_by UUID REFERENCES users(id),
+    title VARCHAR(180) NOT NULL,
+    file_url TEXT NOT NULL,
+    file_type VARCHAR(60),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -317,6 +418,8 @@ VALUES
     ('message_templates.write', 'Gerenciar templates de mensagem', 'Permite criar e editar templates', 'message_templates'),
     ('messages.read', 'Consultar mensagens', 'Permite visualizar mensagens', 'messages'),
     ('messages.write', 'Gerenciar mensagens', 'Permite criar e enviar mensagens', 'messages'),
+    ('financial.read', 'Consultar financeiro', 'Permite visualizar lancamentos financeiros', 'financial'),
+    ('financial.write', 'Gerenciar financeiro', 'Permite criar e editar lancamentos financeiros', 'financial'),
     ('tasks.read', 'Consultar tarefas', 'Permite visualizar tarefas', 'tasks'),
     ('tasks.write', 'Gerenciar tarefas', 'Permite criar e editar tarefas', 'tasks'),
     ('notifications.read', 'Consultar notificacoes', 'Permite visualizar notificacoes', 'notifications'),

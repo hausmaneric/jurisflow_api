@@ -62,6 +62,25 @@ RESOURCE_SELECT = {
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
+    "document_versions": """
+        SELECT id, company_id, document_id, created_by, version_label, title, file_url, file_type, notes, is_current, created_at, updated_at
+        FROM document_versions
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "document_attachments": """
+        SELECT id, company_id, document_id, uploaded_by, title, file_url, file_type, notes, created_at, updated_at
+        FROM document_attachments
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "document_signature_requests": """
+        SELECT id, company_id, document_id, requester_user_id, signer_name, signer_email, signer_document, signer_role,
+               status, access_token, sent_at, viewed_at, signed_at, cancelled_at, notes, created_at, updated_at
+        FROM document_signature_requests
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
     "tasks": """
         SELECT id, company_id, client_id, case_id, assigned_user_id, title, description, priority, due_at, status, created_by, created_at, updated_at
         FROM tasks
@@ -84,6 +103,24 @@ RESOURCE_SELECT = {
         SELECT id, company_id, client_id, case_id, template_id, channel, recipient, subject, body, status, sent_at, created_by, created_at, updated_at
         FROM messages
         WHERE company_id = %s
+        ORDER BY created_at DESC
+    """,
+    "financial_entries": """
+        SELECT fe.id, fe.company_id, fe.client_id, fe.case_id, fe.created_by, fe.entry_date, fe.description,
+               fe.entry_type, fe.category, fe.account_label, fe.amount, fe.status, fe.notes,
+               fe.created_at, fe.updated_at,
+               c.name AS client_name,
+               cs.case_number
+        FROM financial_entries fe
+        LEFT JOIN clients c ON c.id = fe.client_id
+        LEFT JOIN cases cs ON cs.id = fe.case_id
+        WHERE fe.company_id = %s AND fe.deleted_at IS NULL
+        ORDER BY fe.entry_date DESC, fe.created_at DESC
+    """,
+    "message_attachments": """
+        SELECT id, company_id, message_id, uploaded_by, title, file_url, file_type, notes, created_at, updated_at
+        FROM message_attachments
+        WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
     "notifications": """
