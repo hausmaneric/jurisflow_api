@@ -18,4 +18,4 @@ app.config["JSON_AS_ASCII"] = False
 
 load_runtime_config()
 
-from source.controller import ctrl_account, ctrl_auth, ctrl_catalog, ctrl_crud, ctrl_files, ctrl_main, ctrl_ocr, ctrl_public, ctrl_reports, ctrl_setup, ctrl_templates  # noqa: E402,F401
+from source.controller import ctrl_account, ctrl_advanced, ctrl_auth, ctrl_catalog, ctrl_crud, ctrl_files, ctrl_main, ctrl_ocr, ctrl_public, ctrl_reports, ctrl_setup, ctrl_templates  # noqa: E402,F401

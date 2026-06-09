@@ -187,6 +187,16 @@ def role_permission_item(record_id):
     return _dispatch_item("role_permissions", record_id)
 
 
+@app.route("/api/v1/company-subscriptions", methods=["GET", "POST"])
+def company_subscriptions():
+    return _dispatch_collection("company_subscriptions")
+
+
+@app.route("/api/v1/company-subscriptions/<record_id>", methods=["GET", "PUT", "DELETE"])
+def company_subscription_item(record_id):
+    return _dispatch_item("company_subscriptions", record_id)
+
+
 @app.route("/api/v1/clients", methods=["GET", "POST"])
 def clients():
     return _dispatch_collection("clients")
@@ -195,6 +205,26 @@ def clients():
 @app.route("/api/v1/clients/<record_id>", methods=["GET", "PUT", "DELETE"])
 def client_item(record_id):
     return _dispatch_item("clients", record_id)
+
+
+@app.route("/api/v1/client-contacts", methods=["GET", "POST"])
+def client_contacts():
+    return _dispatch_collection("client_contacts")
+
+
+@app.route("/api/v1/client-contacts/<record_id>", methods=["GET", "PUT", "DELETE"])
+def client_contact_item(record_id):
+    return _dispatch_item("client_contacts", record_id)
+
+
+@app.route("/api/v1/client-addresses", methods=["GET", "POST"])
+def client_addresses():
+    return _dispatch_collection("client_addresses")
+
+
+@app.route("/api/v1/client-addresses/<record_id>", methods=["GET", "PUT", "DELETE"])
+def client_address_item(record_id):
+    return _dispatch_item("client_addresses", record_id)
 
 
 @app.route("/api/v1/lawyers", methods=["GET", "POST"])
@@ -207,6 +237,16 @@ def lawyer_item(record_id):
     return _dispatch_item("lawyers", record_id)
 
 
+@app.route("/api/v1/lawyer-certificates", methods=["GET", "POST"])
+def lawyer_certificates():
+    return _dispatch_collection("lawyer_certificates")
+
+
+@app.route("/api/v1/lawyer-certificates/<record_id>", methods=["GET", "PUT", "DELETE"])
+def lawyer_certificate_item(record_id):
+    return _dispatch_item("lawyer_certificates", record_id)
+
+
 @app.route("/api/v1/cases", methods=["GET", "POST"])
 def cases():
     return _dispatch_collection("cases")
@@ -215,6 +255,76 @@ def cases():
 @app.route("/api/v1/cases/<record_id>", methods=["GET", "PUT", "DELETE"])
 def case_item(record_id):
     return _dispatch_item("cases", record_id)
+
+
+@app.route("/api/v1/case-parties", methods=["GET", "POST"])
+def case_parties():
+    return _dispatch_collection("case_parties")
+
+
+@app.route("/api/v1/case-parties/<record_id>", methods=["GET", "PUT", "DELETE"])
+def case_party_item(record_id):
+    return _dispatch_item("case_parties", record_id)
+
+
+@app.route("/api/v1/court-connectors", methods=["GET", "POST"])
+def court_connectors():
+    return _dispatch_collection("court_connectors")
+
+
+@app.route("/api/v1/court-connectors/<record_id>", methods=["GET", "PUT", "DELETE"])
+def court_connector_item(record_id):
+    return _dispatch_item("court_connectors", record_id)
+
+
+@app.route("/api/v1/case-sync-logs", methods=["GET", "POST"])
+def case_sync_logs():
+    return _dispatch_collection("case_sync_logs")
+
+
+@app.route("/api/v1/case-sync-logs/<record_id>", methods=["GET", "PUT", "DELETE"])
+def case_sync_log_item(record_id):
+    return _dispatch_item("case_sync_logs", record_id)
+
+
+@app.route("/api/v1/case-movements", methods=["GET", "POST"])
+def case_movements():
+    return _dispatch_collection("case_movements")
+
+
+@app.route("/api/v1/case-movements/<record_id>", methods=["GET", "PUT", "DELETE"])
+def case_movement_item(record_id):
+    return _dispatch_item("case_movements", record_id)
+
+
+@app.route("/api/v1/case-documents-synced", methods=["GET", "POST"])
+def case_documents_synced():
+    return _dispatch_collection("case_documents_synced")
+
+
+@app.route("/api/v1/case-documents-synced/<record_id>", methods=["GET", "PUT", "DELETE"])
+def case_document_synced_item(record_id):
+    return _dispatch_item("case_documents_synced", record_id)
+
+
+@app.route("/api/v1/automation-rules", methods=["GET", "POST"])
+def automation_rules():
+    return _dispatch_collection("automation_rules")
+
+
+@app.route("/api/v1/automation-rules/<record_id>", methods=["GET", "PUT", "DELETE"])
+def automation_rule_item(record_id):
+    return _dispatch_item("automation_rules", record_id)
+
+
+@app.route("/api/v1/ai-summaries", methods=["GET", "POST"])
+def ai_summaries():
+    return _dispatch_collection("ai_summaries")
+
+
+@app.route("/api/v1/ai-summaries/<record_id>", methods=["GET", "PUT", "DELETE"])
+def ai_summary_item(record_id):
+    return _dispatch_item("ai_summaries", record_id)
 
 
 @app.route("/api/v1/appointments", methods=["GET", "POST"])
@@ -245,6 +355,16 @@ def documents():
 @app.route("/api/v1/documents/<record_id>", methods=["GET", "PUT", "DELETE"])
 def document_item(record_id):
     return _dispatch_item("documents", record_id)
+
+
+@app.route("/api/v1/document-categories", methods=["GET", "POST"])
+def document_categories():
+    return _dispatch_collection("document_categories")
+
+
+@app.route("/api/v1/document-categories/<record_id>", methods=["GET", "PUT", "DELETE"])
+def document_category_item(record_id):
+    return _dispatch_item("document_categories", record_id)
 
 
 @app.route("/api/v1/document-versions", methods=["GET", "POST"])
@@ -285,6 +405,16 @@ def document_templates():
 @app.route("/api/v1/document-templates/<record_id>", methods=["GET", "PUT", "DELETE"])
 def document_template_item(record_id):
     return _dispatch_item("document_templates", record_id)
+
+
+@app.route("/api/v1/generated-documents", methods=["GET", "POST"])
+def generated_documents():
+    return _dispatch_collection("generated_documents")
+
+
+@app.route("/api/v1/generated-documents/<record_id>", methods=["GET", "PUT", "DELETE"])
+def generated_document_item(record_id):
+    return _dispatch_item("generated_documents", record_id)
 
 
 @app.route("/api/v1/message-templates", methods=["GET", "POST"])
@@ -355,6 +485,106 @@ def notifications():
 @app.route("/api/v1/notifications/<record_id>", methods=["GET", "PUT", "DELETE"])
 def notification_item(record_id):
     return _dispatch_item("notifications", record_id)
+
+
+@app.route("/api/v1/webhooks", methods=["GET", "POST"])
+def webhooks():
+    return _dispatch_collection("webhooks")
+
+
+@app.route("/api/v1/webhooks/<record_id>", methods=["GET", "PUT", "DELETE"])
+def webhook_item(record_id):
+    return _dispatch_item("webhooks", record_id)
+
+
+@app.route("/api/v1/webhook-deliveries", methods=["GET", "POST"])
+def webhook_deliveries():
+    return _dispatch_collection("webhook_deliveries")
+
+
+@app.route("/api/v1/webhook-deliveries/<record_id>", methods=["GET", "PUT", "DELETE"])
+def webhook_delivery_item(record_id):
+    return _dispatch_item("webhook_deliveries", record_id)
+
+
+@app.route("/api/v1/api-tokens", methods=["GET", "POST"])
+def api_tokens():
+    return _dispatch_collection("api_tokens")
+
+
+@app.route("/api/v1/api-tokens/<record_id>", methods=["GET", "PUT", "DELETE"])
+def api_token_item(record_id):
+    return _dispatch_item("api_tokens", record_id)
+
+
+@app.route("/api/v1/notes", methods=["GET", "POST"])
+def notes():
+    return _dispatch_collection("notes")
+
+
+@app.route("/api/v1/notes/<record_id>", methods=["GET", "PUT", "DELETE"])
+def note_item(record_id):
+    return _dispatch_item("notes", record_id)
+
+
+@app.route("/api/v1/transcriptions", methods=["GET", "POST"])
+def transcriptions():
+    return _dispatch_collection("transcriptions")
+
+
+@app.route("/api/v1/transcriptions/<record_id>", methods=["GET", "PUT", "DELETE"])
+def transcription_item(record_id):
+    return _dispatch_item("transcriptions", record_id)
+
+
+@app.route("/api/v1/transcription-files", methods=["GET", "POST"])
+def transcription_files():
+    return _dispatch_collection("transcription_files")
+
+
+@app.route("/api/v1/transcription-files/<record_id>", methods=["GET", "PUT", "DELETE"])
+def transcription_file_item(record_id):
+    return _dispatch_item("transcription_files", record_id)
+
+
+@app.route("/api/v1/transcription-segments", methods=["GET", "POST"])
+def transcription_segments():
+    return _dispatch_collection("transcription_segments")
+
+
+@app.route("/api/v1/transcription-segments/<record_id>", methods=["GET", "PUT", "DELETE"])
+def transcription_segment_item(record_id):
+    return _dispatch_item("transcription_segments", record_id)
+
+
+@app.route("/api/v1/transcription-reviews", methods=["GET", "POST"])
+def transcription_reviews():
+    return _dispatch_collection("transcription_reviews")
+
+
+@app.route("/api/v1/transcription-reviews/<record_id>", methods=["GET", "PUT", "DELETE"])
+def transcription_review_item(record_id):
+    return _dispatch_item("transcription_reviews", record_id)
+
+
+@app.route("/api/v1/transcription-summaries", methods=["GET", "POST"])
+def transcription_summaries():
+    return _dispatch_collection("transcription_summaries")
+
+
+@app.route("/api/v1/transcription-summaries/<record_id>", methods=["GET", "PUT", "DELETE"])
+def transcription_summary_item(record_id):
+    return _dispatch_item("transcription_summaries", record_id)
+
+
+@app.route("/api/v1/transcription-tasks", methods=["GET", "POST"])
+def transcription_tasks():
+    return _dispatch_collection("transcription_tasks")
+
+
+@app.route("/api/v1/transcription-tasks/<record_id>", methods=["GET", "PUT", "DELETE"])
+def transcription_task_item(record_id):
+    return _dispatch_item("transcription_tasks", record_id)
 
 
 @app.route("/api/v1/audit", methods=["GET"])

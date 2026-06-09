@@ -32,11 +32,32 @@ RESOURCE_SELECT = {
         WHERE r.company_id = %s
         ORDER BY rp.created_at DESC
     """,
+    "company_subscriptions": """
+        SELECT cs.id, cs.company_id, cs.plan_id, p.name AS plan_name, cs.status, cs.billing_cycle,
+               cs.current_period_start, cs.current_period_end, cs.cancelled_at, cs.billing_data, cs.created_at, cs.updated_at
+        FROM company_subscriptions cs
+        LEFT JOIN plans p ON p.id = cs.plan_id
+        WHERE cs.company_id = %s AND cs.deleted_at IS NULL
+        ORDER BY cs.created_at DESC
+    """,
     "clients": """
         SELECT id, company_id, name, document, email, phone, birth_date, notes, status, created_at, updated_at
         FROM clients
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
+    """,
+    "client_contacts": """
+        SELECT id, company_id, client_id, type, label, value, is_primary, notes, created_at, updated_at
+        FROM client_contacts
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY is_primary DESC, created_at DESC
+    """,
+    "client_addresses": """
+        SELECT id, company_id, client_id, type, street, number, complement, district, city, state, postal_code,
+               country, is_primary, notes, created_at, updated_at
+        FROM client_addresses
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY is_primary DESC, created_at DESC
     """,
     "lawyers": """
         SELECT id, company_id, user_id, name, email, phone, oab_number, oab_state, specialties, active, created_at, updated_at
@@ -44,9 +65,66 @@ RESOURCE_SELECT = {
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
+    "lawyer_certificates": """
+        SELECT id, company_id, lawyer_id, certificate_name, certificate_file_url, certificate_type, issuer,
+               valid_from, valid_until, status, consent_accepted, consent_text, last_validated_at, created_by,
+               created_at, updated_at
+        FROM lawyer_certificates
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
     "cases": """
         SELECT id, company_id, client_id, lawyer_id, case_number, title, area, court, district, court_branch, phase, status, notes, created_at, updated_at
         FROM cases
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "case_parties": """
+        SELECT id, company_id, case_id, client_id, party_type, name, document, email, phone, role_description,
+               notes, created_at, updated_at
+        FROM case_parties
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "court_connectors": """
+        SELECT id, company_id, court_code, court_name, court_system, base_url, status, supports_public_lookup,
+               supports_certificate, settings, created_at, updated_at
+        FROM court_connectors
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY court_name ASC
+    """,
+    "case_sync_logs": """
+        SELECT id, company_id, case_id, lawyer_id, source, court_system, status, started_at, finished_at,
+               documents_found, documents_downloaded, movements_imported, error_message, raw_data, created_by,
+               created_at, updated_at
+        FROM case_sync_logs
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "case_movements": """
+        SELECT id, company_id, case_id, source, movement_code, movement_date, title, description, raw_data,
+               imported_at, created_at, updated_at
+        FROM case_movements
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY movement_date DESC NULLS LAST, created_at DESC
+    """,
+    "case_documents_synced": """
+        SELECT id, company_id, case_id, sync_log_id, title, source, file_url, file_type, external_id, status,
+               raw_data, created_at, updated_at
+        FROM case_documents_synced
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "automation_rules": """
+        SELECT id, company_id, name, trigger_type, conditions, actions, active, created_by, created_at, updated_at
+        FROM automation_rules
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "ai_summaries": """
+        SELECT id, company_id, entity, entity_id, summary_type, summary, next_steps, risks, source_data, status,
+               created_by, created_at, updated_at
+        FROM ai_summaries
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
@@ -81,6 +159,12 @@ RESOURCE_SELECT = {
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
+    "document_categories": """
+        SELECT id, company_id, name, slug, description, active, created_at, updated_at
+        FROM document_categories
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY name ASC
+    """,
     "tasks": """
         SELECT id, company_id, client_id, case_id, assigned_user_id, title, description, priority, due_at, status, created_by, created_at, updated_at
         FROM tasks
@@ -96,6 +180,13 @@ RESOURCE_SELECT = {
     "document_templates": """
         SELECT id, company_id, name, category, file_type, template_body, variables, active, created_at, updated_at
         FROM document_templates
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "generated_documents": """
+        SELECT id, company_id, template_id, client_id, case_id, document_id, title, output_format, file_url,
+               context, status, generated_by, created_at, updated_at
+        FROM generated_documents
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
@@ -128,6 +219,74 @@ RESOURCE_SELECT = {
         FROM notifications
         WHERE company_id = %s
         ORDER BY created_at DESC
+    """,
+    "webhooks": """
+        SELECT id, company_id, name, target_url, events, active, last_status, last_called_at, created_by,
+               created_at, updated_at
+        FROM webhooks
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "webhook_deliveries": """
+        SELECT id, company_id, webhook_id, event_name, payload, status, response_code, response_body, attempts,
+               next_retry_at, delivered_at, created_at, updated_at
+        FROM webhook_deliveries
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "api_tokens": """
+        SELECT id, company_id, name, scopes, rate_limit_per_minute, status, last_used_at, expires_at, created_by,
+               created_at, updated_at
+        FROM api_tokens
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "notes": """
+        SELECT id, company_id, client_id, case_id, appointment_id, task_id, document_id, title, content, type,
+               visibility, created_by, created_at, updated_at
+        FROM notes
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "transcriptions": """
+        SELECT id, company_id, client_id, case_id, appointment_id, title, source, transcription_type, status,
+               language, quality_score, consent_confirmed, confidentiality, created_by, finalized_at, created_at, updated_at
+        FROM transcriptions
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "transcription_files": """
+        SELECT id, company_id, transcription_id, file_url, file_type, duration_seconds, status, created_at, updated_at
+        FROM transcription_files
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "transcription_segments": """
+        SELECT id, company_id, transcription_id, speaker_label, start_seconds, end_seconds, text, confidence_score,
+               reviewed, created_at, updated_at
+        FROM transcription_segments
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY start_seconds NULLS LAST, created_at ASC
+    """,
+    "transcription_reviews": """
+        SELECT id, company_id, transcription_id, segment_id, original_text, reviewed_text, reviewed_by, created_at
+        FROM transcription_reviews
+        WHERE company_id = %s
+        ORDER BY created_at DESC
+    """,
+    "transcription_summaries": """
+        SELECT id, company_id, transcription_id, summary, key_points, next_steps, risks, status, created_by,
+               created_at, updated_at
+        FROM transcription_summaries
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "transcription_tasks": """
+        SELECT tt.id, tt.company_id, tt.transcription_id, tt.task_id, t.title AS task_title, t.status AS task_status, tt.created_at
+        FROM transcription_tasks tt
+        JOIN tasks t ON t.id = tt.task_id
+        WHERE tt.company_id = %s
+        ORDER BY tt.created_at DESC
     """,
     "appointment_participants": """
         SELECT ap.id, ap.appointment_id, ap.user_id, ap.lawyer_id, ap.participant_name, ap.participant_type, ap.created_at
