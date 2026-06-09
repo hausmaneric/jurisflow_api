@@ -145,6 +145,8 @@ def create_client_portal_session(payload: dict) -> NXResult:
     email = (payload.get("email") or "").strip().lower()
     document = (payload.get("document") or "").strip()
     phone = (payload.get("phone") or "").strip()
+    document_digits = "".join(ch for ch in document if ch.isdigit())
+    phone_digits = "".join(ch for ch in phone if ch.isdigit())
 
     if not company_code:
         r.make_error(0, "company_code obrigatorio")
@@ -182,11 +184,11 @@ def create_client_portal_session(payload: dict) -> NXResult:
             conditions.append("LOWER(cl.email) = %s")
             params.append(email)
         if document:
-            conditions.append("cl.document = %s")
-            params.append(document)
+            conditions.append("(cl.document = %s OR REGEXP_REPLACE(COALESCE(cl.document, ''), '\\D', '', 'g') = %s)")
+            params.extend([document, document_digits])
         if phone:
-            conditions.append("cl.phone = %s")
-            params.append(phone)
+            conditions.append("(cl.phone = %s OR REGEXP_REPLACE(COALESCE(cl.phone, ''), '\\D', '', 'g') = %s)")
+            params.extend([phone, phone_digits])
 
         where_clause = " OR ".join(conditions)
         nx.xp_nx.execute(
@@ -285,7 +287,7 @@ def create_client_portal_session(payload: dict) -> NXResult:
         latest_message = messages[0] if messages else None
         portal_summary = (
             f"Cliente com {len(cases)} processo(s), {active_cases} ativo(s), "
-            f"{len(documents)} documento(s) e {len(messages)} comunicação(ões) registrada(s)."
+            f"{len(documents)} documento(s) e {len(messages)} comunicacao(oes) registrada(s)."
         )
 
         r.status = True
