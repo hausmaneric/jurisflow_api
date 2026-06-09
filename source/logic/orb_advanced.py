@@ -56,6 +56,13 @@ def _digits(value: str | None) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _format_cnj_number(value: str | None) -> str:
+    digits = _digits(value)
+    if len(digits) != 20:
+        return str(value or "")
+    return f"{digits[:7]}-{digits[7:9]}.{digits[9:13]}.{digits[13]}.{digits[14:16]}.{digits[16:]}"
+
+
 def _safe_int(value, default: int = 0) -> int:
     try:
         return int(value or default)
@@ -93,6 +100,26 @@ def _infer_datajud_court(case_row: dict, payload: dict) -> str:
             return "trt" + court_code.lstrip("0")
 
     return ""
+
+
+def _datajud_court_label(court: str) -> str:
+    court = _court_slug(court)
+    labels = {
+        "stf": "Supremo Tribunal Federal",
+        "stj": "Superior Tribunal de Justica",
+        "tst": "Tribunal Superior do Trabalho",
+        "tse": "Tribunal Superior Eleitoral",
+        "stm": "Superior Tribunal Militar",
+    }
+    if court in labels:
+        return labels[court]
+    if court.startswith("tj"):
+        return f"Tribunal de Justica - {court[2:].upper()}"
+    if court.startswith("trf"):
+        return f"Tribunal Regional Federal da {court[3:]}a Regiao"
+    if court.startswith("trt"):
+        return f"Tribunal Regional do Trabalho da {court[3:]}a Regiao"
+    return court.upper() if court else ""
 
 
 def _extract_source(hit: dict) -> dict:
@@ -443,6 +470,154 @@ def validate_lawyer_certificates(lawyer_id: str, session_payload: dict, payload:
     return r
 
 
+def diagnose_case_sync(case_id: str, session_payload: dict, payload: dict | None = None) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "sync.read"):
+        r.make_error(403, "Permissao insuficiente para diagnosticar consulta processual")
+        return r
+
+    payload = payload or {}
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        nx.xp_nx.execute(
+            """
+            SELECT id, client_id, lawyer_id, case_number, title, court, court_branch, phase
+            FROM cases
+            WHERE id = %s AND company_id = %s AND deleted_at IS NULL
+            """,
+            (case_id, session_payload["company_id"]),
+        )
+        case_row = nx.xp_nx.fetchone()
+        if not case_row:
+            r.make_error(404, "Processo nao localizado")
+            return r
+
+        case_dict = dict(case_row)
+        process_number = _digits(case_dict.get("case_number"))
+        inferred_court = _infer_datajud_court(case_dict, payload)
+        lawyer_id = payload.get("lawyer_id") or case_dict.get("lawyer_id")
+
+        certificate = None
+        expired_certificates = 0
+        if lawyer_id:
+            nx.xp_nx.execute(
+                """
+                SELECT id, certificate_name, certificate_type, issuer, valid_until, status, consent_accepted, last_validated_at
+                FROM lawyer_certificates
+                WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
+                  AND status IN ('valid', 'active')
+                  AND consent_accepted = TRUE
+                  AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
+                ORDER BY valid_until NULLS LAST, created_at DESC
+                LIMIT 1
+                """,
+                (session_payload["company_id"], lawyer_id),
+            )
+            certificate = nx.xp_nx.fetchone()
+
+            nx.xp_nx.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM lawyer_certificates
+                WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
+                  AND valid_until IS NOT NULL AND valid_until < CURRENT_DATE
+                """,
+                (session_payload["company_id"], lawyer_id),
+            )
+            expired_certificates = int((nx.xp_nx.fetchone() or {}).get("total") or 0)
+
+        connector = None
+        if inferred_court:
+            nx.xp_nx.execute(
+                """
+                SELECT id, court_code, court_name, court_system, base_url, status, supports_public_lookup, supports_certificate, settings
+                FROM court_connectors
+                WHERE company_id = %s AND deleted_at IS NULL
+                  AND supports_certificate = TRUE
+                  AND status IN ('active', 'available', 'configured', 'operational')
+                  AND (court_system ILIKE %s OR court_code ILIKE %s OR court_name ILIKE %s)
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (session_payload["company_id"], f"%{inferred_court}%", f"%{inferred_court}%", f"%{inferred_court}%"),
+            )
+            connector = nx.xp_nx.fetchone()
+
+        checks = [
+            {
+                "key": "datajud_api_key",
+                "label": "Chave DataJud configurada",
+                "ready": bool(appConfig.datajudApiKey),
+                "message": "Configure JURISFLOW_DATAJUD_API_KEY no Railway" if not appConfig.datajudApiKey else "Consulta gratuita liberada",
+            },
+            {
+                "key": "case_number",
+                "label": "Numero CNJ valido",
+                "ready": len(process_number) == 20,
+                "message": _format_cnj_number(process_number) if len(process_number) == 20 else "Informe um numero CNJ com 20 digitos",
+            },
+            {
+                "key": "datajud_court",
+                "label": "Tribunal DataJud identificado",
+                "ready": bool(inferred_court),
+                "message": _datajud_court_label(inferred_court) if inferred_court else "Informe tribunal/codigo ou corrija o numero CNJ",
+            },
+            {
+                "key": "responsible_lawyer",
+                "label": "Advogado responsavel vinculado",
+                "ready": bool(lawyer_id),
+                "message": "Advogado responsavel encontrado" if lawyer_id else "Vincule um advogado ao processo",
+            },
+            {
+                "key": "lawyer_certificate",
+                "label": "Certificado valido autorizado",
+                "ready": bool(certificate),
+                "message": "Certificado pronto para uso" if certificate else "Cadastre, autorize e valide o certificado do advogado",
+            },
+            {
+                "key": "court_connector",
+                "label": "Conector do tribunal configurado",
+                "ready": bool(connector and connector.get("base_url")),
+                "message": "Conector certificado encontrado" if connector and connector.get("base_url") else "Configure o conector do tribunal correto",
+            },
+        ]
+
+        r.status = True
+        r.message = "Diagnostico da consulta processual carregado"
+        r.data = {
+            "case": {
+                "id": str(case_dict["id"]),
+                "case_number": case_dict.get("case_number"),
+                "normalized_case_number": _format_cnj_number(process_number),
+                "court": case_dict.get("court"),
+                "lawyer_id": str(lawyer_id) if lawyer_id else None,
+            },
+            "datajud": {
+                "ready": all(item["ready"] for item in checks[:3]),
+                "court": inferred_court,
+                "court_label": _datajud_court_label(inferred_court),
+                "base_url": appConfig.datajudBaseUrl,
+            },
+            "tribunal": {
+                "ready": all(item["ready"] for item in checks),
+                "certificate": dict(certificate) if certificate else None,
+                "expired_certificates": expired_certificates,
+                "connector": dict(connector) if connector else None,
+            },
+            "checks": checks,
+        }
+    except Exception as exc:
+        r.make_error(0, "Erro ao diagnosticar consulta processual", str(exc))
+    finally:
+        nx.stop()
+
+    return r
+
+
 def sync_case(case_id: str, source: str, session_payload: dict, payload: dict) -> NXResult:
     r = NXResult()
     if not _has_permission(session_payload, "sync.write"):
@@ -626,11 +801,12 @@ def summarize_transcription(transcription_id: str, session_payload: dict, payloa
             """,
             (transcription_id, session_payload["company_id"]),
         )
-        segments = [row["text"] for row in nx.xp_nx.fetchall()]
-        summary = payload.get("summary") or (" ".join(segments)[:1200] if segments else "Resumo pendente de conteudo transcrito.")
-        key_points = payload.get("key_points") or []
-        next_steps = payload.get("next_steps") or []
-        risks = payload.get("risks") or []
+        segments = [dict(row) for row in nx.xp_nx.fetchall()]
+        generated = _build_transcription_summary(segments)
+        summary = payload.get("summary") or generated["summary"]
+        key_points = payload.get("key_points") or generated["key_points"]
+        next_steps = payload.get("next_steps") or generated["next_steps"]
+        risks = payload.get("risks") or generated["risks"]
         nx.xp_nx.execute(
             """
             INSERT INTO transcription_summaries (company_id, transcription_id, summary, key_points, next_steps, risks, status, created_by)
@@ -661,8 +837,6 @@ def generate_transcription_tasks(transcription_id: str, session_payload: dict, p
         return r
 
     tasks = payload.get("tasks") or []
-    if not tasks:
-        tasks = [{"title": "Revisar encaminhamentos da transcricao", "priority": "media", "status": "pending"}]
 
     nx = NXDatabaseConnection()
     opened = nx.active()
@@ -670,6 +844,28 @@ def generate_transcription_tasks(transcription_id: str, session_payload: dict, p
         return opened
 
     try:
+        if not tasks:
+            nx.xp_nx.execute(
+                """
+                SELECT text
+                FROM transcription_segments
+                WHERE transcription_id = %s AND company_id = %s AND deleted_at IS NULL
+                ORDER BY start_seconds NULLS LAST, created_at ASC
+                """,
+                (transcription_id, session_payload["company_id"]),
+            )
+            segments = [dict(row) for row in nx.xp_nx.fetchall()]
+            generated = _build_transcription_summary(segments)
+            tasks = [
+                {
+                    "title": _task_title_from_text(step),
+                    "description": step,
+                    "priority": "media",
+                    "status": "pending",
+                }
+                for step in generated["next_steps"][:6]
+            ]
+
         created = []
         for task in tasks:
             nx.xp_nx.execute(
@@ -732,6 +928,88 @@ def _segment_text(text: str) -> list[dict]:
     ]
 
 
+def _normalize_segments(segments: list[dict], provider: str) -> list[dict]:
+    normalized = []
+    for index, segment in enumerate(segments or []):
+        text = str(segment.get("text") or segment.get("transcript") or "").strip()
+        if not text:
+            continue
+        start = segment.get("start_seconds", segment.get("start", index * 30))
+        end = segment.get("end_seconds", segment.get("end"))
+        normalized.append(
+            {
+                "speaker_label": segment.get("speaker_label") or segment.get("speaker") or f"Fala {index + 1}",
+                "start_seconds": _safe_int(start),
+                "end_seconds": _safe_int(end, _safe_int(start) + 30) if end is not None else _safe_int(start) + 30,
+                "text": text,
+                "confidence_score": segment.get("confidence_score") or segment.get("confidence") or (1 if provider == "manual" else None),
+                "reviewed": bool(segment.get("reviewed")) if provider != "manual" else True,
+            }
+        )
+    return normalized
+
+
+def _sentences_from_text(text: str) -> list[str]:
+    sentences = [item.strip() for item in re.split(r"(?<=[.!?])\s+", text or "") if item.strip()]
+    if not sentences and text:
+        sentences = [text.strip()]
+    return sentences
+
+
+def _pick_sentences(sentences: list[str], keywords: list[str], limit: int) -> list[str]:
+    selected = []
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        if any(keyword in sentence_lower for keyword in keywords):
+            selected.append(sentence)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def _build_transcription_summary(segments: list[dict]) -> dict:
+    full_text = " ".join(str(segment.get("text") or "").strip() for segment in segments if segment.get("text")).strip()
+    sentences = _sentences_from_text(full_text)
+    summary_sentences = sentences[:4]
+    summary = " ".join(summary_sentences)[:1600] if summary_sentences else "Transcricao sem conteudo suficiente para resumo."
+
+    key_points = _pick_sentences(
+        sentences,
+        ["ficou definido", "foi definido", "acordado", "combinado", "importante", "cliente", "processo", "audiencia", "prazo", "documento"],
+        8,
+    )
+    next_steps = _pick_sentences(
+        sentences,
+        ["providenciar", "enviar", "protocolar", "anexar", "preparar", "agendar", "retornar", "cobrar", "verificar", "acompanhar"],
+        8,
+    )
+    risks = _pick_sentences(
+        sentences,
+        ["risco", "urgente", "prazo", "vencimento", "atraso", "pendente", "indefer", "multa", "bloqueio", "audiencia"],
+        6,
+    )
+
+    if not key_points:
+        key_points = sentences[:5]
+    if not next_steps:
+        next_steps = ["Revisar a transcricao e confirmar os encaminhamentos com o responsavel."]
+    if not risks:
+        risks = ["Nenhum risco objetivo identificado automaticamente; recomenda-se revisao juridica humana."]
+
+    return {
+        "summary": summary,
+        "key_points": key_points,
+        "next_steps": next_steps,
+        "risks": risks,
+    }
+
+
+def _task_title_from_text(text: str) -> str:
+    clean = re.sub(r"\s+", " ", str(text or "")).strip()
+    clean = re.sub(r"^(providenciar|enviar|protocolar|anexar|preparar|agendar|retornar|cobrar|verificar|acompanhar)\s+", lambda m: m.group(1).capitalize() + " ", clean, flags=re.I)
+    return clean[:120] if clean else "Revisar encaminhamento da transcricao"
+
+
 def _call_whisper_worker(transcription: dict, file_row: dict, payload: dict) -> list[dict]:
     if not appConfig.whisperWorkerUrl:
         raise RuntimeError("JURISFLOW_WHISPER_WORKER_URL nao configurada")
@@ -761,9 +1039,9 @@ def _call_whisper_worker(transcription: dict, file_row: dict, payload: dict) -> 
     data = response.json()
     segments = data.get("segments") or []
     if segments:
-        return segments
+        return _normalize_segments(segments, "whisper_worker")
     if data.get("text"):
-        return _segment_text(data["text"])
+        return _normalize_segments(_segment_text(data["text"]), "whisper_worker")
     raise RuntimeError("Worker Whisper nao retornou segmentos nem texto")
 
 
@@ -810,7 +1088,7 @@ def process_transcription(transcription_id: str, session_payload: dict, payload:
             if not text:
                 r.make_error(0, "Para provider manual, informe text/transcript com o conteudo transcrito")
                 return r
-            segments = _segment_text(text)
+            segments = _normalize_segments(_segment_text(text), provider)
         elif provider == "whisper_worker":
             if not file_row:
                 r.make_error(0, "Envie um arquivo antes de processar com whisper_worker")
@@ -835,14 +1113,20 @@ def process_transcription(transcription_id: str, session_payload: dict, payload:
                 (
                     session_payload["company_id"],
                     transcription_id,
-                    segment.get("speaker_label") or segment.get("speaker") or "Transcricao",
-                    segment.get("start_seconds") or segment.get("start") or 0,
-                    segment.get("end_seconds") or segment.get("end"),
-                    segment.get("text") or "",
-                    segment.get("confidence_score") or segment.get("confidence") or (1 if provider == "manual" else None),
-                    bool(segment.get("reviewed")) if provider != "manual" else True,
+                    segment["speaker_label"],
+                    segment["start_seconds"],
+                    segment["end_seconds"],
+                    segment["text"],
+                    segment["confidence_score"],
+                    segment["reviewed"],
                 ),
             )
+        confidence_values = [
+            float(segment["confidence_score"])
+            for segment in segments
+            if segment.get("confidence_score") is not None
+        ]
+        quality_score = int(round((sum(confidence_values) / len(confidence_values)) * 100)) if confidence_values else None
         nx.xp_nx.execute(
             """
             UPDATE transcriptions
@@ -850,7 +1134,7 @@ def process_transcription(transcription_id: str, session_payload: dict, payload:
             WHERE id = %s AND company_id = %s
             RETURNING id, title, status, quality_score, updated_at
             """,
-            ("reviewed" if provider == "manual" else "transcribed", 100 if provider == "manual" else None, transcription_id, session_payload["company_id"]),
+            ("reviewed" if provider == "manual" else "transcribed", quality_score, transcription_id, session_payload["company_id"]),
         )
         updated = nx.xp_nx.fetchone()
         nx.conn_nx.commit()

@@ -3,6 +3,7 @@ from flask import request
 from source.app import app
 from source.core.system.utils import NXResult, get_session_payload
 from source.logic.orb_advanced import (
+    diagnose_case_sync,
     generate_transcription_tasks,
     check_in_appointment,
     link_lawyer_user,
@@ -53,6 +54,15 @@ def case_sync_datajud(case_id):
     return r.toJSON(), (200 if r.status else 400)
 
 
+@app.route("/api/v1/cases/<case_id>/sync-diagnosis", methods=["GET"])
+def case_sync_diagnosis(case_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = diagnose_case_sync(case_id, session_payload, request.args.to_dict())
+    return r.toJSON(), (200 if r.status else 400)
+
+
 @app.route("/api/v1/cases/<case_id>/sync-tribunal", methods=["POST"])
 def case_sync_tribunal(case_id):
     session_payload, error = _session_or_error()
@@ -67,9 +77,7 @@ def case_sync_full(case_id):
     session_payload, error = _session_or_error()
     if error:
         return error
-    payload = request.get_json(silent=True) or {}
-    payload.setdefault("court_system", "full")
-    r = sync_case(case_id, "full", session_payload, payload)
+    r = sync_case(case_id, "full", session_payload, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)
 
 
