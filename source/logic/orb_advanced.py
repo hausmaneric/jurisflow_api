@@ -761,10 +761,19 @@ def review_transcription(transcription_id: str, session_payload: dict, payload: 
             nx.xp_nx.execute(
                 """
                 UPDATE transcription_segments
-                SET reviewed = TRUE, text = %s, updated_at = NOW()
+                SET reviewed = TRUE,
+                    text = %s,
+                    speaker_label = COALESCE(NULLIF(%s, ''), speaker_label),
+                    updated_at = NOW()
                 WHERE id = %s AND transcription_id = %s AND company_id = %s
                 """,
-                (reviewed_text, payload.get("segment_id"), transcription_id, session_payload["company_id"]),
+                (
+                    reviewed_text,
+                    payload.get("speaker_label"),
+                    payload.get("segment_id"),
+                    transcription_id,
+                    session_payload["company_id"],
+                ),
             )
         nx.conn_nx.commit()
         register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "transcriptions", transcription_id, "review", None, {"review_id": str(review["id"])})
