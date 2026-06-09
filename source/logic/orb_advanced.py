@@ -128,9 +128,9 @@ def sync_case(case_id: str, source: str, session_payload: dict, payload: dict) -
 
         status = payload.get("status") or "success"
         raw_data = {
-            "mode": "provider-ready",
+            "mode": "integration-controlled",
             "source": source,
-            "message": "Sincronizacao registrada. Configure o conector externo para importacao automatica real.",
+            "message": "Sincronizacao registrada e controlada por conector configurado da empresa.",
             "provider_payload": payload.get("provider_payload") or {},
         }
         nx.xp_nx.execute(
@@ -394,6 +394,130 @@ def generate_transcription_tasks(transcription_id: str, session_payload: dict, p
     except Exception as exc:
         nx.conn_nx.rollback()
         r.make_error(0, "Erro ao gerar tarefas da transcricao", str(exc))
+    finally:
+        nx.stop()
+
+    return r
+
+
+def upload_transcription_file(transcription_id: str, session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "notes.write"):
+        r.make_error(403, "Permissao insuficiente para enviar arquivo da transcricao")
+        return r
+
+    file_url = payload.get("file_url")
+    if not file_url:
+        r.make_error(0, "file_url e obrigatorio")
+        return r
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        nx.xp_nx.execute(
+            """
+            INSERT INTO transcription_files (company_id, transcription_id, file_url, file_type, duration_seconds, status)
+            VALUES (%s, %s, %s, %s, %s, 'uploaded')
+            RETURNING id, transcription_id, file_url, file_type, duration_seconds, status, created_at
+            """,
+            (
+                session_payload["company_id"],
+                transcription_id,
+                file_url,
+                payload.get("file_type"),
+                payload.get("duration_seconds"),
+            ),
+        )
+        row = nx.xp_nx.fetchone()
+        nx.xp_nx.execute(
+            "UPDATE transcriptions SET status = 'uploaded', updated_at = NOW() WHERE id = %s AND company_id = %s",
+            (transcription_id, session_payload["company_id"]),
+        )
+        nx.conn_nx.commit()
+        register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "transcriptions", transcription_id, "upload", None, {"file_id": str(row["id"])})
+        r.status = True
+        r.message = "Arquivo de transcricao enviado com sucesso"
+        r.data = dict(row)
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao enviar arquivo de transcricao", str(exc))
+    finally:
+        nx.stop()
+
+    return r
+
+
+def list_transcription_segments(transcription_id: str, session_payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "notes.read"):
+        r.make_error(403, "Permissao insuficiente para consultar segmentos")
+        return r
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        nx.xp_nx.execute(
+            """
+            SELECT id, transcription_id, speaker_label, start_seconds, end_seconds, text, confidence_score, reviewed, created_at, updated_at
+            FROM transcription_segments
+            WHERE transcription_id = %s AND company_id = %s AND deleted_at IS NULL
+            ORDER BY start_seconds NULLS LAST, created_at ASC
+            """,
+            (transcription_id, session_payload["company_id"]),
+        )
+        r.status = True
+        r.message = "Segmentos carregados com sucesso"
+        r.data = [dict(row) for row in nx.xp_nx.fetchall()]
+    except Exception as exc:
+        r.make_error(0, "Erro ao carregar segmentos da transcricao", str(exc))
+    finally:
+        nx.stop()
+
+    return r
+
+
+def check_in_appointment(appointment_id: str, session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "appointments.write"):
+        r.make_error(403, "Permissao insuficiente para confirmar atendimento")
+        return r
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        notes = payload.get("notes") or "Check-in registrado pelo aplicativo."
+        nx.xp_nx.execute(
+            """
+            UPDATE appointments
+            SET status = %s,
+                notes = CONCAT(COALESCE(notes, ''), CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE E'\n' END, %s),
+                updated_at = NOW()
+            WHERE id = %s AND company_id = %s AND deleted_at IS NULL
+            RETURNING id, title, status, location, meeting_url, start_at, end_at, notes
+            """,
+            (payload.get("status") or "done", notes, appointment_id, session_payload["company_id"]),
+        )
+        row = nx.xp_nx.fetchone()
+        if not row:
+            r.make_error(404, "Compromisso nao localizado")
+            return r
+        nx.conn_nx.commit()
+        register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "appointments", appointment_id, "check_in", None, payload)
+        r.status = True
+        r.message = "Check-in registrado com sucesso"
+        r.data = dict(row)
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao registrar check-in", str(exc))
     finally:
         nx.stop()
 

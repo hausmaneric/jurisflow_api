@@ -105,11 +105,17 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS clients (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id),
+    type VARCHAR(30) NOT NULL DEFAULT 'person',
     name VARCHAR(160) NOT NULL,
     document VARCHAR(30),
+    rg_ie VARCHAR(40),
     email VARCHAR(160),
     phone VARCHAR(40),
+    civil_status VARCHAR(80),
+    profession VARCHAR(120),
     birth_date DATE,
+    responsible_user_id UUID REFERENCES users(id),
+    origin VARCHAR(80),
     notes TEXT,
     status VARCHAR(30) NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -201,6 +207,8 @@ CREATE TABLE IF NOT EXISTS cases (
     court_branch VARCHAR(120),
     phase VARCHAR(80),
     status VARCHAR(30) NOT NULL DEFAULT 'open',
+    claim_value NUMERIC(14,2) NOT NULL DEFAULT 0,
+    expected_fees NUMERIC(14,2) NOT NULL DEFAULT 0,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -336,6 +344,9 @@ CREATE TABLE IF NOT EXISTS appointments (
     start_at TIMESTAMPTZ NOT NULL,
     end_at TIMESTAMPTZ,
     location TEXT,
+    meeting_url TEXT,
+    reminder_minutes INTEGER NOT NULL DEFAULT 15,
+    recurrence_rule TEXT,
     notes TEXT,
     status VARCHAR(30) NOT NULL DEFAULT 'scheduled',
     created_by UUID REFERENCES users(id),
@@ -359,10 +370,16 @@ CREATE TABLE IF NOT EXISTS documents (
     company_id UUID NOT NULL REFERENCES companies(id),
     client_id UUID REFERENCES clients(id),
     case_id UUID REFERENCES cases(id),
+    category_id UUID,
     uploaded_by UUID REFERENCES users(id),
     title VARCHAR(180) NOT NULL,
     file_url TEXT NOT NULL,
     file_type VARCHAR(60),
+    mime_type VARCHAR(120),
+    size_bytes BIGINT,
+    version_label VARCHAR(60) NOT NULL DEFAULT 'v1',
+    origin VARCHAR(80) NOT NULL DEFAULT 'manual',
+    expires_at DATE,
     status VARCHAR(30) NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -454,6 +471,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     company_id UUID NOT NULL REFERENCES companies(id),
     client_id UUID REFERENCES clients(id),
     case_id UUID REFERENCES cases(id),
+    appointment_id UUID REFERENCES appointments(id),
     assigned_user_id UUID REFERENCES users(id),
     title VARCHAR(180) NOT NULL,
     description TEXT,
@@ -480,6 +498,7 @@ CREATE TABLE IF NOT EXISTS message_templates (
     company_id UUID NOT NULL REFERENCES companies(id),
     name VARCHAR(120) NOT NULL,
     channel VARCHAR(40) NOT NULL DEFAULT 'whatsapp',
+    situation VARCHAR(120),
     subject VARCHAR(180),
     body TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -530,6 +549,12 @@ CREATE TABLE IF NOT EXISTS messages (
     subject VARCHAR(180),
     body TEXT NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'queued',
+    scheduled_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    read_at TIMESTAMPTZ,
+    provider VARCHAR(80),
+    provider_message_id VARCHAR(180),
+    error_message TEXT,
     sent_at TIMESTAMPTZ,
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -764,6 +789,38 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     new_data JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS type VARCHAR(30) NOT NULL DEFAULT 'person';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS rg_ie VARCHAR(40);
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS civil_status VARCHAR(80);
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS profession VARCHAR(120);
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS responsible_user_id UUID REFERENCES users(id);
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS origin VARCHAR(80);
+
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS claim_value NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS expected_fees NUMERIC(14,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS meeting_url TEXT;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reminder_minutes INTEGER NOT NULL DEFAULT 15;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS recurrence_rule TEXT;
+
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES document_categories(id);
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime_type VARCHAR(120);
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS size_bytes BIGINT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS version_label VARCHAR(60) NOT NULL DEFAULT 'v1';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS origin VARCHAR(80) NOT NULL DEFAULT 'manual';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS expires_at DATE;
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS appointment_id UUID REFERENCES appointments(id);
+
+ALTER TABLE message_templates ADD COLUMN IF NOT EXISTS situation VARCHAR(120);
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider VARCHAR(80);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider_message_id VARCHAR(180);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS error_message TEXT;
 
 INSERT INTO permissions (code, name, description, module_name)
 VALUES

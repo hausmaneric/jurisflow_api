@@ -4,11 +4,14 @@ from source.app import app
 from source.core.system.utils import NXResult, get_session_payload
 from source.logic.orb_advanced import (
     generate_transcription_tasks,
+    check_in_appointment,
     link_lawyer_user,
+    list_transcription_segments,
     review_transcription,
     summarize_transcription,
     sync_case,
     update_transcription_status,
+    upload_transcription_file,
     validate_lawyer_certificates,
 )
 
@@ -78,12 +81,30 @@ def transcription_start_recording(transcription_id):
     return r.toJSON(), (200 if r.status else 400)
 
 
+@app.route("/api/v1/transcriptions/<transcription_id>/upload", methods=["POST"])
+def transcription_upload(transcription_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = upload_transcription_file(transcription_id, session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
 @app.route("/api/v1/transcriptions/<transcription_id>/finish-recording", methods=["POST"])
 def transcription_finish_recording(transcription_id):
     session_payload, error = _session_or_error()
     if error:
         return error
     r = update_transcription_status(transcription_id, "processing", session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/transcriptions/<transcription_id>/segments", methods=["GET"])
+def transcription_segments_alias(transcription_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = list_transcription_segments(transcription_id, session_payload)
     return r.toJSON(), (200 if r.status else 400)
 
 
@@ -120,4 +141,13 @@ def transcription_generate_tasks(transcription_id):
     if error:
         return error
     r = generate_transcription_tasks(transcription_id, session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/appointments/<appointment_id>/check-in", methods=["POST"])
+def appointment_check_in(appointment_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = check_in_appointment(appointment_id, session_payload, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)

@@ -41,7 +41,8 @@ RESOURCE_SELECT = {
         ORDER BY cs.created_at DESC
     """,
     "clients": """
-        SELECT id, company_id, name, document, email, phone, birth_date, notes, status, created_at, updated_at
+        SELECT id, company_id, type, name, document, rg_ie, email, phone, civil_status, profession,
+               birth_date, responsible_user_id, origin, notes, status, created_at, updated_at
         FROM clients
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
@@ -74,7 +75,8 @@ RESOURCE_SELECT = {
         ORDER BY created_at DESC
     """,
     "cases": """
-        SELECT id, company_id, client_id, lawyer_id, case_number, title, area, court, district, court_branch, phase, status, notes, created_at, updated_at
+        SELECT id, company_id, client_id, lawyer_id, case_number, title, area, court, district, court_branch,
+               phase, status, claim_value, expected_fees, notes, created_at, updated_at
         FROM cases
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
@@ -129,13 +131,15 @@ RESOURCE_SELECT = {
         ORDER BY created_at DESC
     """,
     "appointments": """
-        SELECT id, company_id, client_id, case_id, title, type, mode, start_at, end_at, location, notes, status, created_by, created_at, updated_at
+        SELECT id, company_id, client_id, case_id, title, type, mode, start_at, end_at, location,
+               meeting_url, reminder_minutes, recurrence_rule, notes, status, created_by, created_at, updated_at
         FROM appointments
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY start_at DESC, created_at DESC
     """,
     "documents": """
-        SELECT id, company_id, client_id, case_id, uploaded_by, title, file_url, file_type, status, created_at, updated_at
+        SELECT id, company_id, client_id, case_id, category_id, uploaded_by, title, file_url, file_type,
+               mime_type, size_bytes, version_label, origin, expires_at, status, created_at, updated_at
         FROM documents
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
@@ -166,13 +170,14 @@ RESOURCE_SELECT = {
         ORDER BY name ASC
     """,
     "tasks": """
-        SELECT id, company_id, client_id, case_id, assigned_user_id, title, description, priority, due_at, status, created_by, created_at, updated_at
+        SELECT id, company_id, client_id, case_id, appointment_id, assigned_user_id, title, description,
+               priority, due_at, status, created_by, created_at, updated_at
         FROM tasks
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY due_at NULLS LAST, created_at DESC
     """,
     "message_templates": """
-        SELECT id, company_id, name, channel, subject, body, active, created_at, updated_at
+        SELECT id, company_id, name, channel, situation, subject, body, active, created_at, updated_at
         FROM message_templates
         WHERE company_id = %s
         ORDER BY created_at DESC
@@ -191,7 +196,9 @@ RESOURCE_SELECT = {
         ORDER BY created_at DESC
     """,
     "messages": """
-        SELECT id, company_id, client_id, case_id, template_id, channel, recipient, subject, body, status, sent_at, created_by, created_at, updated_at
+        SELECT id, company_id, client_id, case_id, template_id, channel, recipient, subject, body, status,
+               scheduled_at, sent_at, delivered_at, read_at, provider, provider_message_id, error_message,
+               created_by, created_at, updated_at
         FROM messages
         WHERE company_id = %s
         ORDER BY created_at DESC
