@@ -27,6 +27,11 @@ class AppConfig:
     jwtExpiresHours: int = 12
     publicBaseUrl: str = ""
     storageRoot: str = "storage"
+    datajudApiKey: str = ""
+    datajudBaseUrl: str = "https://api-publica.datajud.cnj.jus.br"
+    transcriptionProvider: str = "manual"
+    whisperWorkerUrl: str = ""
+    whisperWorkerToken: str = ""
 
 
 appConfig = AppConfig()
@@ -55,6 +60,11 @@ def load_runtime_config() -> None:
         "JURISFLOW_JWT_EXPIRES_HOURS": os.getenv("JURISFLOW_JWT_EXPIRES_HOURS"),
         "JURISFLOW_PUBLIC_BASE_URL": os.getenv("JURISFLOW_PUBLIC_BASE_URL"),
         "JURISFLOW_STORAGE_ROOT": os.getenv("JURISFLOW_STORAGE_ROOT"),
+        "JURISFLOW_DATAJUD_API_KEY": os.getenv("JURISFLOW_DATAJUD_API_KEY"),
+        "JURISFLOW_DATAJUD_BASE_URL": os.getenv("JURISFLOW_DATAJUD_BASE_URL"),
+        "JURISFLOW_TRANSCRIPTION_PROVIDER": os.getenv("JURISFLOW_TRANSCRIPTION_PROVIDER"),
+        "JURISFLOW_WHISPER_WORKER_URL": os.getenv("JURISFLOW_WHISPER_WORKER_URL"),
+        "JURISFLOW_WHISPER_WORKER_TOKEN": os.getenv("JURISFLOW_WHISPER_WORKER_TOKEN"),
     }
 
     for key, value in env_map.items():
@@ -75,3 +85,8 @@ def load_runtime_config() -> None:
     appConfig.jwtExpiresHours = int(runtime_data.get("JURISFLOW_JWT_EXPIRES_HOURS", appConfig.jwtExpiresHours))
     appConfig.publicBaseUrl = runtime_data.get("JURISFLOW_PUBLIC_BASE_URL", appConfig.publicBaseUrl)
     appConfig.storageRoot = runtime_data.get("JURISFLOW_STORAGE_ROOT", appConfig.storageRoot)
+    appConfig.datajudApiKey = runtime_data.get("JURISFLOW_DATAJUD_API_KEY", appConfig.datajudApiKey)
+    appConfig.datajudBaseUrl = runtime_data.get("JURISFLOW_DATAJUD_BASE_URL", appConfig.datajudBaseUrl)
+    appConfig.transcriptionProvider = runtime_data.get("JURISFLOW_TRANSCRIPTION_PROVIDER", appConfig.transcriptionProvider)
+    appConfig.whisperWorkerUrl = runtime_data.get("JURISFLOW_WHISPER_WORKER_URL", appConfig.whisperWorkerUrl)
+    appConfig.whisperWorkerToken = runtime_data.get("JURISFLOW_WHISPER_WORKER_TOKEN", appConfig.whisperWorkerToken)

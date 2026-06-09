@@ -7,6 +7,7 @@ from source.logic.orb_advanced import (
     check_in_appointment,
     link_lawyer_user,
     list_transcription_segments,
+    process_transcription,
     review_transcription,
     summarize_transcription,
     sync_case,
@@ -96,6 +97,15 @@ def transcription_finish_recording(transcription_id):
     if error:
         return error
     r = update_transcription_status(transcription_id, "processing", session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/transcriptions/<transcription_id>/process", methods=["POST"])
+def transcription_process(transcription_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = process_transcription(transcription_id, session_payload, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)
 
 

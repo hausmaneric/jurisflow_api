@@ -77,6 +77,7 @@ def _route_catalog() -> list[dict]:
         {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/start-recording", "purpose": "marca inicio de gravacao/transcricao"},
         {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/upload", "purpose": "anexa audio ou video a transcricao"},
         {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/finish-recording", "purpose": "finaliza gravacao e inicia processamento"},
+        {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/process", "purpose": "processa transcricao por modo manual ou worker Whisper"},
         {"method": "GET", "path": "/api/v1/transcriptions/<transcription_id>/segments", "purpose": "lista segmentos da transcricao"},
         {"method": "GET/POST", "path": "/api/v1/transcription-files", "purpose": "arquivos de audio ou video de transcricoes"},
         {"method": "GET/POST", "path": "/api/v1/transcription-segments", "purpose": "segmentos transcritos"},
@@ -106,6 +107,11 @@ def health():
     r.data = {
         "service": appConfig.apiName,
         "version": appConfig.apiVersion,
+        "integrations": {
+            "datajud_configured": bool(appConfig.datajudApiKey),
+            "transcription_provider": appConfig.transcriptionProvider,
+            "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
+        },
     }
     return r.toJSON()
 
@@ -153,6 +159,9 @@ def environment():
         "database": validation,
         "jwt_expires_hours": appConfig.jwtExpiresHours,
         "setup_key_configured": bool(appConfig.setupKey),
+        "datajud_configured": bool(appConfig.datajudApiKey),
+        "transcription_provider": appConfig.transcriptionProvider,
+        "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
     }
     return r.toJSON()
 
