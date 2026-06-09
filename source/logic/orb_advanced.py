@@ -237,6 +237,16 @@ def _sync_datajud_case(nx, case_id: str, case_row: dict, session_payload: dict, 
             (court_name, court_branch, phase, case_id, session_payload["company_id"]),
         )
 
+    if source_data:
+        nx.xp_nx.execute(
+            """
+            UPDATE case_movements
+            SET deleted_at = NOW(), updated_at = NOW()
+            WHERE company_id = %s AND case_id = %s AND source = 'datajud' AND deleted_at IS NULL
+            """,
+            (session_payload["company_id"], case_id),
+        )
+
     for movement in movements[:80]:
         title = _movement_title(movement)
         nx.xp_nx.execute(
@@ -335,6 +345,25 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
 
     documents = data.get("documents") or []
     movements = data.get("movements") or []
+    imported_documents = 0
+    imported_movements = 0
+    nx.xp_nx.execute(
+        """
+        UPDATE case_documents_synced
+        SET deleted_at = NOW(), updated_at = NOW()
+        WHERE company_id = %s AND case_id = %s AND source = 'tribunal' AND deleted_at IS NULL
+        """,
+        (session_payload["company_id"], case_id),
+    )
+    nx.xp_nx.execute(
+        """
+        UPDATE case_movements
+        SET deleted_at = NOW(), updated_at = NOW()
+        WHERE company_id = %s AND case_id = %s AND source = 'tribunal' AND deleted_at IS NULL
+        """,
+        (session_payload["company_id"], case_id),
+    )
+
     for document in documents[:80]:
         nx.xp_nx.execute(
             """
@@ -352,6 +381,7 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
                 _json(document),
             ),
         )
+        imported_documents += 1
     for movement in movements[:80]:
         nx.xp_nx.execute(
             """
@@ -368,14 +398,15 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
                 _json(movement),
             ),
         )
+        imported_movements += 1
 
     payload["documents_found"] = len(documents)
-    payload["documents_downloaded"] = len(documents)
-    payload["movements_imported"] = len(movements)
+    payload["documents_downloaded"] = imported_documents
+    payload["movements_imported"] = imported_movements
     payload["court_system"] = connector.get("court_system")
     log_row = _insert_sync_log(nx, session_payload, case_id, "tribunal", payload, {"connector_id": str(connector["id"]), "response": data}, "success")
     register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "lawyer_certificates", str(certificate["id"]), "certificate_use", None, {"case_id": case_id, "connector_id": str(connector["id"])})
-    return {"log": dict(log_row), "documents_imported": len(documents), "movements_imported": len(movements)}
+    return {"log": dict(log_row), "documents_imported": imported_documents, "movements_imported": imported_movements}
 
 
 def link_lawyer_user(lawyer_id: str, session_payload: dict, payload: dict) -> NXResult:
