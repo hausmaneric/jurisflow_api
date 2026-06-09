@@ -912,13 +912,98 @@ def generate_transcription_tasks(transcription_id: str, session_payload: dict, p
     return r
 
 
+def _seconds_from_timestamp(value: str | None, fallback: int = 0) -> int:
+    if not value:
+        return fallback
+    parts = [part for part in str(value).strip().split(":") if part != ""]
+    try:
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(float(parts[2]))
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(float(parts[1]))
+        return int(float(parts[0]))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _format_seconds(value) -> str:
+    total = _safe_int(value)
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    seconds = total % 60
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def _parse_manual_line(line: str, index: int) -> dict | None:
+    clean = str(line or "").strip()
+    if not clean:
+        return None
+
+    pattern = re.compile(
+        r"^(?:\[(?P<bracket_time>\d{1,2}:\d{2}(?::\d{2})?)\]\s*)?"
+        r"(?:(?P<plain_time>\d{1,2}:\d{2}(?::\d{2})?)\s+)?"
+        r"(?P<speaker>[A-Za-zÀ-ÿ0-9 ._'/-]{2,80})\s*(?:[:\-–—])\s*(?P<text>.+)$"
+    )
+    match = pattern.match(clean)
+    if match:
+        timestamp = match.group("bracket_time") or match.group("plain_time")
+        start = _seconds_from_timestamp(timestamp, index * 30)
+        return {
+            "speaker_label": match.group("speaker").strip(),
+            "start_seconds": start,
+            "end_seconds": start + 30,
+            "text": match.group("text").strip(),
+            "confidence_score": 1,
+        }
+
+    continuation_pattern = re.compile(r"^(?:\[(?P<bracket_time>\d{1,2}:\d{2}(?::\d{2})?)\]\s*)?(?P<text>.+)$")
+    continuation = continuation_pattern.match(clean)
+    timestamp = continuation.group("bracket_time") if continuation else None
+    start = _seconds_from_timestamp(timestamp, index * 30)
+    return {
+        "speaker_label": "Fala sem identificação",
+        "start_seconds": start,
+        "end_seconds": start + 30,
+        "text": continuation.group("text").strip() if continuation else clean,
+        "confidence_score": 1,
+    }
+
+
 def _segment_text(text: str) -> list[dict]:
-    chunks = [line.strip() for line in re.split(r"\n{2,}|\r\n{2,}", text or "") if line.strip()]
-    if not chunks and text:
-        chunks = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+    raw_text = str(text or "").strip()
+    if not raw_text:
+        return []
+
+    raw_text = re.sub(
+        r"\s+(?=(?:\[\d{1,2}:\d{2}(?::\d{2})?\]\s*)?[A-Za-zÀ-ÿ0-9 ._'/-]{2,80}\s*[:\-–—]\s+)",
+        "\n",
+        raw_text,
+    )
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    parsed_lines = [_parse_manual_line(line, index) for index, line in enumerate(lines)]
+    parsed_lines = [line for line in parsed_lines if line]
+
+    speaker_like_count = sum(1 for item in parsed_lines if item["speaker_label"] != "Fala sem identificação")
+    if parsed_lines and (speaker_like_count or len(parsed_lines) > 1):
+        merged = []
+        for item in parsed_lines:
+            if (
+                item["speaker_label"] == "Fala sem identificação"
+                and merged
+                and not re.match(r"^\d{1,2}:\d{2}", item["text"])
+            ):
+                merged[-1]["text"] = f"{merged[-1]['text']}\n{item['text']}"
+                merged[-1]["end_seconds"] = max(_safe_int(merged[-1]["end_seconds"]), _safe_int(item["end_seconds"]))
+            else:
+                merged.append(item)
+        return merged
+
+    chunks = [part.strip() for part in re.split(r"(?<=[.!?])\s+", raw_text) if part.strip()]
     return [
         {
-            "speaker_label": "Transcricao",
+            "speaker_label": "Fala sem identificação",
             "start_seconds": index * 30,
             "end_seconds": (index + 1) * 30,
             "text": chunk,
@@ -1002,6 +1087,34 @@ def _build_transcription_summary(segments: list[dict]) -> dict:
         "next_steps": next_steps,
         "risks": risks,
     }
+
+
+def _format_transcription_text(transcription: dict, segments: list[dict], summary_data: dict | None = None) -> str:
+    summary_data = summary_data or _build_transcription_summary(segments)
+    lines = [
+        f"Transcrição: {transcription.get('title') or 'Sem título'}",
+        f"Tipo: {transcription.get('transcription_type') or '-'}",
+        f"Idioma: {transcription.get('language') or 'pt-BR'}",
+        "",
+        "Resumo",
+        summary_data["summary"],
+        "",
+        "Pontos-chave",
+    ]
+    lines.extend(f"- {item}" for item in summary_data["key_points"])
+    lines.extend(["", "Próximos passos"])
+    lines.extend(f"- {item}" for item in summary_data["next_steps"])
+    lines.extend(["", "Riscos e cuidados"])
+    lines.extend(f"- {item}" for item in summary_data["risks"])
+    lines.extend(["", "Transcrição completa"])
+    for segment in segments:
+        start = _format_seconds(segment.get("start_seconds"))
+        end = _format_seconds(segment.get("end_seconds"))
+        speaker = segment.get("speaker_label") or "Fala sem identificação"
+        lines.append(f"[{start} - {end}] {speaker}:")
+        lines.append(str(segment.get("text") or "").strip())
+        lines.append("")
+    return "\n".join(lines).strip()
 
 
 def _task_title_from_text(text: str) -> str:
@@ -1227,6 +1340,148 @@ def list_transcription_segments(transcription_id: str, session_payload: dict) ->
         r.data = [dict(row) for row in nx.xp_nx.fetchall()]
     except Exception as exc:
         r.make_error(0, "Erro ao carregar segmentos da transcricao", str(exc))
+    finally:
+        nx.stop()
+
+    return r
+
+
+def _load_transcription_with_segments(nx, transcription_id: str, company_id: str) -> tuple[dict | None, list[dict]]:
+    nx.xp_nx.execute(
+        """
+        SELECT id, company_id, client_id, case_id, appointment_id, title, source, transcription_type,
+               status, language, quality_score, confidentiality, created_by, finalized_at, created_at
+        FROM transcriptions
+        WHERE id = %s AND company_id = %s AND deleted_at IS NULL
+        """,
+        (transcription_id, company_id),
+    )
+    transcription = nx.xp_nx.fetchone()
+    if not transcription:
+        return None, []
+
+    nx.xp_nx.execute(
+        """
+        SELECT id, transcription_id, speaker_label, start_seconds, end_seconds, text, confidence_score, reviewed, created_at, updated_at
+        FROM transcription_segments
+        WHERE transcription_id = %s AND company_id = %s AND deleted_at IS NULL
+        ORDER BY start_seconds NULLS LAST, created_at ASC
+        """,
+        (transcription_id, company_id),
+    )
+    return dict(transcription), [dict(row) for row in nx.xp_nx.fetchall()]
+
+
+def export_transcription_note(transcription_id: str, session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "notes.write"):
+        r.make_error(403, "Permissão insuficiente para gerar anotação da transcrição")
+        return r
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        transcription, segments = _load_transcription_with_segments(nx, transcription_id, session_payload["company_id"])
+        if not transcription:
+            r.make_error(404, "Transcrição não localizada")
+            return r
+        if not segments:
+            r.make_error(0, "A transcrição ainda não possui falas processadas")
+            return r
+
+        summary_data = _build_transcription_summary(segments)
+        full_content = _format_transcription_text(transcription, segments, summary_data)
+        note_content = payload.get("content") or full_content
+        nx.xp_nx.execute(
+            """
+            INSERT INTO notes (company_id, client_id, case_id, appointment_id, title, content, type, visibility, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, 'transcription', %s, %s)
+            RETURNING id, title, type, visibility, created_at
+            """,
+            (
+                session_payload["company_id"],
+                transcription.get("client_id"),
+                transcription.get("case_id"),
+                transcription.get("appointment_id"),
+                payload.get("title") or f"Anotação da transcrição - {transcription.get('title')}",
+                note_content,
+                payload.get("visibility") or transcription.get("confidentiality") or "internal",
+                session_payload.get("user_id"),
+            ),
+        )
+        row = nx.xp_nx.fetchone()
+        nx.conn_nx.commit()
+        register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "transcriptions", transcription_id, "export_note", None, {"note_id": str(row["id"])})
+        r.status = True
+        r.message = "Anotação gerada a partir da transcrição"
+        r.data = dict(row)
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao gerar anotação da transcrição", str(exc))
+    finally:
+        nx.stop()
+
+    return r
+
+
+def export_transcription_document(transcription_id: str, session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "documents.write"):
+        r.make_error(403, "Permissão insuficiente para gerar documento da transcrição")
+        return r
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        transcription, segments = _load_transcription_with_segments(nx, transcription_id, session_payload["company_id"])
+        if not transcription:
+            r.make_error(404, "Transcrição não localizada")
+            return r
+        if not segments:
+            r.make_error(0, "A transcrição ainda não possui falas processadas")
+            return r
+
+        summary_data = _build_transcription_summary(segments)
+        full_content = _format_transcription_text(transcription, segments, summary_data)
+        context = {
+            "source": "transcription",
+            "transcription": transcription,
+            "summary": summary_data,
+            "content": full_content,
+            "segments": segments,
+            "format": "structured_text",
+        }
+        nx.xp_nx.execute(
+            """
+            INSERT INTO generated_documents (company_id, client_id, case_id, title, output_format, context, status, generated_by)
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'generated', %s)
+            RETURNING id, title, output_format, status, created_at
+            """,
+            (
+                session_payload["company_id"],
+                transcription.get("client_id"),
+                transcription.get("case_id"),
+                payload.get("title") or f"Documento de transcrição - {transcription.get('title')}",
+                payload.get("output_format") or "html",
+                _json(context),
+                session_payload.get("user_id"),
+            ),
+        )
+        row = nx.xp_nx.fetchone()
+        nx.conn_nx.commit()
+        register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "transcriptions", transcription_id, "export_document", None, {"generated_document_id": str(row["id"])})
+        r.status = True
+        r.message = "Documento gerado a partir da transcrição"
+        r.data = dict(row)
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao gerar documento da transcrição", str(exc))
     finally:
         nx.stop()
 

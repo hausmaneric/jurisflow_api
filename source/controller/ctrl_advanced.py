@@ -4,6 +4,8 @@ from source.app import app
 from source.core.system.utils import NXResult, get_session_payload
 from source.logic.orb_advanced import (
     diagnose_case_sync,
+    export_transcription_document,
+    export_transcription_note,
     generate_transcription_tasks,
     check_in_appointment,
     link_lawyer_user,
@@ -159,6 +161,24 @@ def transcription_generate_tasks(transcription_id):
     if error:
         return error
     r = generate_transcription_tasks(transcription_id, session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/transcriptions/<transcription_id>/export-note", methods=["POST"])
+def transcription_export_note(transcription_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = export_transcription_note(transcription_id, session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/transcriptions/<transcription_id>/export-document", methods=["POST"])
+def transcription_export_document(transcription_id):
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = export_transcription_document(transcription_id, session_payload, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)
 
 

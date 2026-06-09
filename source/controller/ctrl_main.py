@@ -86,6 +86,8 @@ def _route_catalog() -> list[dict]:
         {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/finalize", "purpose": "conclui transcricao revisada"},
         {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/summary", "purpose": "gera resumo e pontos de acao da transcricao"},
         {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/generate-tasks", "purpose": "gera tarefas a partir da transcricao"},
+        {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/export-note", "purpose": "gera anotacao estruturada a partir da transcricao"},
+        {"method": "POST", "path": "/api/v1/transcriptions/<transcription_id>/export-document", "purpose": "gera documento estruturado a partir da transcricao"},
         {"method": "POST", "path": "/api/v1/appointments/<appointment_id>/check-in", "purpose": "confirma atendimento ou audiencia com observacoes"},
         {"method": "GET", "path": "/api/v1/audit", "purpose": "auditoria do tenant"},
         {"method": "GET", "path": "/api/v1/reports/summary", "purpose": "resumo operacional"},
