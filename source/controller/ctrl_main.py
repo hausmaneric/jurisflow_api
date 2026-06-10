@@ -54,6 +54,7 @@ def _route_catalog() -> list[dict]:
         {"method": "POST", "path": "/api/v1/cases/<case_id>/sync-full", "purpose": "registra sincronizacao processual completa"},
         {"method": "GET", "path": "/api/v1/datajud/courts", "purpose": "lista aliases oficiais da API Publica DataJud"},
         {"method": "POST", "path": "/api/v1/datajud/search", "purpose": "consulta DataJud por numero CNJ ou Query DSL com search_after"},
+        {"method": "POST", "path": "/api/v1/court-connectors/seed-defaults", "purpose": "cadastra conectores padrao para todos os tribunais via ponte local A3"},
         {"method": "GET/POST", "path": "/api/v1/case-sync-logs", "purpose": "historico das sincronizacoes processuais"},
         {"method": "GET/POST", "path": "/api/v1/case-movements", "purpose": "andamentos importados ou cadastrados"},
         {"method": "GET/POST", "path": "/api/v1/case-documents-synced", "purpose": "documentos importados de tribunais"},

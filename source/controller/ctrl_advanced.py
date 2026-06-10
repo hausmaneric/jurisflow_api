@@ -17,6 +17,7 @@ from source.logic.orb_advanced import (
     process_transcription,
     register_certificate_agent,
     review_transcription,
+    seed_default_court_connectors,
     summarize_transcription,
     search_datajud_records,
     sync_case,
@@ -149,6 +150,15 @@ def datajud_search():
     if error:
         return error
     r = search_datajud_records(session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/court-connectors/seed-defaults", methods=["POST"])
+def court_connectors_seed_defaults():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = seed_default_court_connectors(session_payload, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)
 
 

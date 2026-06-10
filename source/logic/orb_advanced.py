@@ -215,6 +215,47 @@ def _datajud_court_label(court: str) -> str:
     return court.upper() if court else ""
 
 
+def _court_system_family(court: str) -> str:
+    court = _court_slug(court)
+    if court.startswith("trt") or court == "tst":
+        return "pje_trabalhista"
+    if court.startswith("trf"):
+        return "pje_federal"
+    if court in {"tse", "tre"}:
+        return "pje_eleitoral"
+    if court in {"stj", "stm"}:
+        return court
+    if court.startswith("tjm"):
+        return "pje_militar"
+    return "tribunal_local_bridge"
+
+
+def _default_connector_payload(court: str, sync_endpoint: str | None = None) -> dict:
+    court = _court_slug(court)
+    bridge_url = str(sync_endpoint or appConfig.localCourtBridgeUrl).rstrip("/")
+    return {
+        "court_code": court,
+        "court_name": _datajud_court_label(court),
+        "court_system": court,
+        "base_url": bridge_url,
+        "status": "configured",
+        "supports_public_lookup": True,
+        "supports_certificate": True,
+        "settings": {
+            "datajud_alias": f"api_publica_{court}",
+            "system_family": _court_system_family(court),
+            "sync_endpoint": bridge_url,
+            "requires_local_agent": True,
+            "certificate_modes": ["token_a3_local", "cloud_provider", "file_a1"],
+            "expected_response": {"documents": [], "movements": []},
+            "notes": (
+                "Conector padrao para ponte local: o Railway nao acessa o token/certificado. "
+                "O agente local chama este endpoint no computador autorizado e devolve apenas o resultado."
+            ),
+        },
+    }
+
+
 def _extract_source(hit: dict) -> dict:
     return hit.get("_source") or hit.get("source") or hit
 
@@ -946,6 +987,119 @@ def search_datajud_records(session_payload: dict, payload: dict) -> NXResult:
         }
     except Exception as exc:
         r.make_error(0, "Erro ao consultar DataJud", str(exc))
+    return r
+
+
+def seed_default_court_connectors(session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "integrations.write"):
+        r.make_error(403, "Permissao insuficiente para cadastrar conectores de tribunais")
+        return r
+
+    sync_endpoint = payload.get("sync_endpoint") or payload.get("base_url") or appConfig.localCourtBridgeUrl
+    requested = payload.get("courts") or payload.get("court_codes") or []
+    courts = [_court_slug(item) for item in requested] if isinstance(requested, list) and requested else sorted(DATAJUD_COURTS)
+    courts = [court for court in courts if court in DATAJUD_COURTS]
+    if not courts:
+        r.make_error(0, "Nenhum tribunal valido informado para cadastro")
+        return r
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        created = 0
+        updated = 0
+        records = []
+        for court in courts:
+            connector = _default_connector_payload(court, sync_endpoint)
+            nx.xp_nx.execute(
+                """
+                SELECT id
+                FROM court_connectors
+                WHERE company_id = %s AND court_code = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (session_payload["company_id"], connector["court_code"]),
+            )
+            existing = nx.xp_nx.fetchone()
+            if existing:
+                nx.xp_nx.execute(
+                    """
+                    UPDATE court_connectors
+                    SET court_name = %s,
+                        court_system = %s,
+                        base_url = %s,
+                        status = %s,
+                        supports_public_lookup = %s,
+                        supports_certificate = %s,
+                        settings = %s::jsonb,
+                        updated_at = NOW(),
+                        deleted_at = NULL
+                    WHERE id = %s
+                    RETURNING id, court_code, court_name, court_system, base_url, status
+                    """,
+                    (
+                        connector["court_name"],
+                        connector["court_system"],
+                        connector["base_url"],
+                        connector["status"],
+                        connector["supports_public_lookup"],
+                        connector["supports_certificate"],
+                        _json(connector["settings"]),
+                        existing["id"],
+                    ),
+                )
+                updated += 1
+                row = nx.xp_nx.fetchone()
+                records.append(dict(row))
+            else:
+                nx.xp_nx.execute(
+                    """
+                    INSERT INTO court_connectors (
+                        company_id, court_code, court_name, court_system, base_url, status,
+                        supports_public_lookup, supports_certificate, settings
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                    RETURNING id, court_code, court_name, court_system, base_url, status
+                    """,
+                    (
+                        session_payload["company_id"],
+                        connector["court_code"],
+                        connector["court_name"],
+                        connector["court_system"],
+                        connector["base_url"],
+                        connector["status"],
+                        connector["supports_public_lookup"],
+                        connector["supports_certificate"],
+                        _json(connector["settings"]),
+                    ),
+                )
+                created += 1
+                records.append(dict(nx.xp_nx.fetchone()))
+
+        nx.conn_nx.commit()
+        register_audit_log(
+            session_payload["company_id"],
+            session_payload.get("user_id"),
+            "court_connectors",
+            None,
+            "seed_defaults",
+            None,
+            {"created": created, "updated": updated, "sync_endpoint": sync_endpoint, "courts": courts},
+        )
+        r.status = True
+        r.message = "Conectores padrao dos tribunais cadastrados"
+        r.data = {"created": created, "updated": updated, "total": len(records), "sync_endpoint": sync_endpoint, "records": records}
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao cadastrar conectores dos tribunais", str(exc))
+    finally:
+        nx.stop()
+
     return r
 
 

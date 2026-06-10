@@ -31,6 +31,7 @@ class AppConfig:
     storageRoot: str = "storage"
     datajudApiKey: str = DATAJUD_PUBLIC_API_KEY
     datajudBaseUrl: str = "https://api-publica.datajud.cnj.jus.br"
+    localCourtBridgeUrl: str = "http://127.0.0.1:8765/tribunal-sync"
     transcriptionProvider: str = "manual"
     whisperWorkerUrl: str = ""
     whisperWorkerToken: str = ""
@@ -64,6 +65,7 @@ def load_runtime_config() -> None:
         "JURISFLOW_STORAGE_ROOT": os.getenv("JURISFLOW_STORAGE_ROOT"),
         "JURISFLOW_DATAJUD_API_KEY": os.getenv("JURISFLOW_DATAJUD_API_KEY"),
         "JURISFLOW_DATAJUD_BASE_URL": os.getenv("JURISFLOW_DATAJUD_BASE_URL"),
+        "JURISFLOW_LOCAL_COURT_BRIDGE_URL": os.getenv("JURISFLOW_LOCAL_COURT_BRIDGE_URL"),
         "JURISFLOW_TRANSCRIPTION_PROVIDER": os.getenv("JURISFLOW_TRANSCRIPTION_PROVIDER"),
         "JURISFLOW_WHISPER_WORKER_URL": os.getenv("JURISFLOW_WHISPER_WORKER_URL"),
         "JURISFLOW_WHISPER_WORKER_TOKEN": os.getenv("JURISFLOW_WHISPER_WORKER_TOKEN"),
@@ -89,6 +91,7 @@ def load_runtime_config() -> None:
     appConfig.storageRoot = runtime_data.get("JURISFLOW_STORAGE_ROOT", appConfig.storageRoot)
     appConfig.datajudApiKey = runtime_data.get("JURISFLOW_DATAJUD_API_KEY", appConfig.datajudApiKey)
     appConfig.datajudBaseUrl = runtime_data.get("JURISFLOW_DATAJUD_BASE_URL", appConfig.datajudBaseUrl)
+    appConfig.localCourtBridgeUrl = runtime_data.get("JURISFLOW_LOCAL_COURT_BRIDGE_URL", appConfig.localCourtBridgeUrl)
     appConfig.transcriptionProvider = runtime_data.get("JURISFLOW_TRANSCRIPTION_PROVIDER", appConfig.transcriptionProvider)
     appConfig.whisperWorkerUrl = runtime_data.get("JURISFLOW_WHISPER_WORKER_URL", appConfig.whisperWorkerUrl)
     appConfig.whisperWorkerToken = runtime_data.get("JURISFLOW_WHISPER_WORKER_TOKEN", appConfig.whisperWorkerToken)

@@ -29,6 +29,33 @@ Campos principais:
 
 Nesse modo, o conector do tribunal deve chamar um agente local ou ponte segura instalada na maquina onde o token esta conectado. O agente faz a assinatura/autenticacao localmente e devolve apenas o resultado autorizado.
 
+## Cadastro automatico de conectores
+
+Para cadastrar os conectores padrao de todos os tribunais DataJud no escritorio atual:
+
+```http
+POST /api/v1/court-connectors/seed-defaults
+Authorization: Bearer <token_admin>
+Content-Type: application/json
+
+{
+  "sync_endpoint": "http://127.0.0.1:8765/tribunal-sync"
+}
+```
+
+O endpoint e idempotente: se o conector ja existir para o `court_code`, ele atualiza; se nao existir, cria.
+
+Esses conectores nao enviam certificado para a nuvem. Eles apontam para a ponte local que roda no computador autorizado. O contrato da ponte local deve receber `case_number`, `court_system` e dados do certificado local, e responder:
+
+```json
+{
+  "documents": [],
+  "movements": []
+}
+```
+
+Para A3/token fisico, use o valor padrao `http://127.0.0.1:8765/tribunal-sync`, porque quem chama esse endereco e o agente local, nao o Railway.
+
 ### Fluxo com agente local A3
 
 1. Um administrador registra o agente local:
