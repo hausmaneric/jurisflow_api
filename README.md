@@ -86,6 +86,7 @@ A API esta preparada para consultar DataJud primeiro e, depois, o tribunal corre
 
 Cada tribunal possui regras proprias de autenticacao, certificado e disponibilidade. Por isso o JurisFlow usa conectores configuraveis.
 Para A3/token USB ou smartcard, a chave privada nao e enviada para a API; o conector deve acionar agente local ou provedor externo. Veja `docs/certificados-e-tribunais.md`.
+Um agente local simples para polling de jobs A3 esta em `certificate_agent/`.
 
 ### Transcricao sem OpenAI
 

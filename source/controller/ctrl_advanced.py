@@ -3,6 +3,9 @@ from flask import request
 from source.app import app
 from source.core.system.utils import NXResult, get_session_payload
 from source.logic.orb_advanced import (
+    certificate_agent_complete_job,
+    certificate_agent_heartbeat,
+    certificate_agent_next_job,
     diagnose_case_sync,
     export_transcription_document,
     export_transcription_note,
@@ -11,6 +14,7 @@ from source.logic.orb_advanced import (
     link_lawyer_user,
     list_transcription_segments,
     process_transcription,
+    register_certificate_agent,
     review_transcription,
     summarize_transcription,
     sync_case,
@@ -29,6 +33,15 @@ def _session_or_error():
         return None, (r.toJSON(), 401)
 
 
+def _agent_token_or_error():
+    header = request.headers.get("Authorization", "")
+    if header.startswith("Bearer "):
+        return header.removeprefix("Bearer ").strip(), None
+    r = NXResult()
+    r.make_error(401, "Token do agente nao informado")
+    return None, (r.toJSON(), 401)
+
+
 @app.route("/api/v1/lawyers/<lawyer_id>/link-user", methods=["POST", "PUT"])
 def lawyer_link_user(lawyer_id):
     session_payload, error = _session_or_error()
@@ -44,6 +57,42 @@ def lawyer_certificates_validate(lawyer_id):
     if error:
         return error
     r = validate_lawyer_certificates(lawyer_id, session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/certificate-agents/register", methods=["POST"])
+def certificate_agent_register():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = register_certificate_agent(session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/certificate-agents/heartbeat", methods=["POST"])
+def certificate_agent_ping():
+    token, error = _agent_token_or_error()
+    if error:
+        return error
+    r = certificate_agent_heartbeat(token, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/certificate-agents/jobs/next", methods=["GET", "POST"])
+def certificate_agent_job_next():
+    token, error = _agent_token_or_error()
+    if error:
+        return error
+    r = certificate_agent_next_job(token)
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/certificate-agents/jobs/<job_id>/complete", methods=["POST"])
+def certificate_agent_job_complete(job_id):
+    token, error = _agent_token_or_error()
+    if error:
+        return error
+    r = certificate_agent_complete_job(token, job_id, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)
 
 

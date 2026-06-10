@@ -307,6 +307,26 @@ def case_document_synced_item(record_id):
     return _dispatch_item("case_documents_synced", record_id)
 
 
+@app.route("/api/v1/certificate-agents", methods=["GET", "POST"])
+def certificate_agents():
+    return _dispatch_collection("certificate_agents")
+
+
+@app.route("/api/v1/certificate-agents/<record_id>", methods=["GET", "PUT", "DELETE"])
+def certificate_agent_item(record_id):
+    return _dispatch_item("certificate_agents", record_id)
+
+
+@app.route("/api/v1/certificate-agent-jobs", methods=["GET", "POST"])
+def certificate_agent_jobs():
+    return _dispatch_collection("certificate_agent_jobs")
+
+
+@app.route("/api/v1/certificate-agent-jobs/<record_id>", methods=["GET", "PUT", "DELETE"])
+def certificate_agent_job_item(record_id):
+    return _dispatch_item("certificate_agent_jobs", record_id)
+
+
 @app.route("/api/v1/automation-rules", methods=["GET", "POST"])
 def automation_rules():
     return _dispatch_collection("automation_rules")

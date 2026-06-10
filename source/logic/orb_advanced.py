@@ -1,5 +1,7 @@
 import json
+import hashlib
 import re
+import secrets
 
 import requests
 
@@ -19,6 +21,10 @@ def _json(value) -> str:
 
 def _jsonable(value):
     return json.loads(_json(value))
+
+
+def _hash_agent_token(token: str) -> str:
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
 
 
 CNJ_STATE_COURTS = {
@@ -172,6 +178,65 @@ def _insert_sync_log(nx, session_payload: dict, case_id: str, source: str, paylo
     return nx.xp_nx.fetchone()
 
 
+def _replace_tribunal_imports(nx, company_id: str, case_id: str, documents: list[dict], movements: list[dict]) -> tuple[int, int]:
+    nx.xp_nx.execute(
+        """
+        UPDATE case_documents_synced
+        SET deleted_at = NOW(), updated_at = NOW()
+        WHERE company_id = %s AND case_id = %s AND source = 'tribunal' AND deleted_at IS NULL
+        """,
+        (company_id, case_id),
+    )
+    nx.xp_nx.execute(
+        """
+        UPDATE case_movements
+        SET deleted_at = NOW(), updated_at = NOW()
+        WHERE company_id = %s AND case_id = %s AND source = 'tribunal' AND deleted_at IS NULL
+        """,
+        (company_id, case_id),
+    )
+
+    imported_documents = 0
+    imported_movements = 0
+    for document in documents[:80]:
+        nx.xp_nx.execute(
+            """
+            INSERT INTO case_documents_synced (company_id, case_id, title, source, file_url, file_type, external_id, status, raw_data)
+            VALUES (%s, %s, %s, 'tribunal', %s, %s, %s, %s, %s::jsonb)
+            """,
+            (
+                company_id,
+                case_id,
+                document.get("title") or document.get("name") or "Documento do tribunal",
+                document.get("file_url") or document.get("url"),
+                document.get("file_type") or document.get("type") or "pdf",
+                document.get("external_id"),
+                document.get("status") or "imported",
+                _json(document),
+            ),
+        )
+        imported_documents += 1
+    for movement in movements[:80]:
+        nx.xp_nx.execute(
+            """
+            INSERT INTO case_movements (company_id, case_id, source, movement_code, movement_date, title, description, raw_data)
+            VALUES (%s, %s, 'tribunal', %s, COALESCE(%s::date, CURRENT_DATE), %s, %s, %s::jsonb)
+            """,
+            (
+                company_id,
+                case_id,
+                movement.get("code"),
+                _movement_date(movement),
+                _movement_title(movement),
+                movement.get("description") or movement.get("descricao"),
+                _json(movement),
+            ),
+        )
+        imported_movements += 1
+
+    return imported_documents, imported_movements
+
+
 def _call_datajud(case_row: dict, payload: dict) -> dict:
     if not appConfig.datajudApiKey:
         raise RuntimeError("JURISFLOW_DATAJUD_API_KEY nao configurada")
@@ -288,22 +353,29 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
 
     nx.xp_nx.execute(
         """
-        SELECT id, certificate_name, certificate_type, certificate_access_mode, certificate_file_url,
+        SELECT id, lawyer_id, certificate_name, certificate_type, certificate_access_mode, certificate_file_url,
                certificate_provider, device_identifier, local_agent_id, cloud_certificate_ref,
                metadata, status, valid_until, consent_accepted
         FROM lawyer_certificates
-        WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
+        WHERE company_id = %s AND deleted_at IS NULL
+          AND (
+            lawyer_id = %s
+            OR lawyer_id IN (
+                SELECT id FROM lawyers WHERE company_id = %s AND user_id = %s AND deleted_at IS NULL
+            )
+          )
           AND status IN ('valid', 'active')
           AND consent_accepted = TRUE
           AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
         ORDER BY valid_until NULLS LAST, created_at DESC
         LIMIT 1
         """,
-        (session_payload["company_id"], lawyer_id),
+        (session_payload["company_id"], lawyer_id, session_payload["company_id"], lawyer_id),
     )
     certificate = nx.xp_nx.fetchone()
     if not certificate:
         raise RuntimeError("Advogado sem certificado ativo, valido e autorizado")
+    payload["lawyer_id"] = str(certificate.get("lawyer_id") or lawyer_id)
     certificate_access_mode = certificate.get("certificate_access_mode") or "file_a1"
     if certificate_access_mode == "file_a1" and not certificate.get("certificate_file_url"):
         raise RuntimeError("Certificado A1 sem arquivo seguro configurado")
@@ -349,6 +421,45 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
     headers = {"Content-Type": "application/json"}
     if settings.get("api_key"):
         headers["Authorization"] = f"Bearer {settings['api_key']}"
+    if certificate_access_mode == "token_a3_local" and not settings.get("allow_server_side_a3"):
+        assigned_agent_key = certificate.get("local_agent_id") or certificate.get("device_identifier")
+        if not assigned_agent_key:
+            raise RuntimeError("Certificado A3 sem agente local configurado")
+        nx.xp_nx.execute(
+            """
+            INSERT INTO certificate_agent_jobs (
+                company_id, case_id, lawyer_id, certificate_id, connector_id, assigned_agent_key,
+                job_type, status, request_payload, created_by
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, 'tribunal_sync', 'pending', %s::jsonb, %s)
+            RETURNING id, status, assigned_agent_key, created_at
+            """,
+            (
+                session_payload["company_id"],
+                case_id,
+                certificate.get("lawyer_id"),
+                certificate["id"],
+                connector["id"],
+                assigned_agent_key,
+                _json({"endpoint": endpoint, "headers": headers, "body": body, "connector_settings": settings}),
+                session_payload.get("user_id"),
+            ),
+        )
+        job = nx.xp_nx.fetchone()
+        payload["court_system"] = connector.get("court_system")
+        payload["error_message"] = "Consulta aguardando agente local A3"
+        log_row = _insert_sync_log(
+            nx,
+            session_payload,
+            case_id,
+            "tribunal",
+            payload,
+            {"connector_id": str(connector["id"]), "agent_job_id": str(job["id"]), "access_mode": certificate_access_mode},
+            "pending",
+            "Consulta aguardando agente local A3",
+        )
+        return {"log": dict(log_row), "agent_job": dict(job), "status": "pending_agent"}
+
     response = requests.post(endpoint, json=body, headers=headers, timeout=_safe_int(settings.get("timeout"), 60))
     if response.status_code >= 400:
         raise RuntimeError(f"Conector do tribunal retornou HTTP {response.status_code}: {response.text[:500]}")
@@ -356,60 +467,7 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
 
     documents = data.get("documents") or []
     movements = data.get("movements") or []
-    imported_documents = 0
-    imported_movements = 0
-    nx.xp_nx.execute(
-        """
-        UPDATE case_documents_synced
-        SET deleted_at = NOW(), updated_at = NOW()
-        WHERE company_id = %s AND case_id = %s AND source = 'tribunal' AND deleted_at IS NULL
-        """,
-        (session_payload["company_id"], case_id),
-    )
-    nx.xp_nx.execute(
-        """
-        UPDATE case_movements
-        SET deleted_at = NOW(), updated_at = NOW()
-        WHERE company_id = %s AND case_id = %s AND source = 'tribunal' AND deleted_at IS NULL
-        """,
-        (session_payload["company_id"], case_id),
-    )
-
-    for document in documents[:80]:
-        nx.xp_nx.execute(
-            """
-            INSERT INTO case_documents_synced (company_id, case_id, title, source, file_url, file_type, external_id, status, raw_data)
-            VALUES (%s, %s, %s, 'tribunal', %s, %s, %s, %s, %s::jsonb)
-            """,
-            (
-                session_payload["company_id"],
-                case_id,
-                document.get("title") or document.get("name") or "Documento do tribunal",
-                document.get("file_url") or document.get("url"),
-                document.get("file_type") or document.get("type") or "pdf",
-                document.get("external_id"),
-                document.get("status") or "imported",
-                _json(document),
-            ),
-        )
-        imported_documents += 1
-    for movement in movements[:80]:
-        nx.xp_nx.execute(
-            """
-            INSERT INTO case_movements (company_id, case_id, source, movement_code, movement_date, title, description, raw_data)
-            VALUES (%s, %s, 'tribunal', %s, COALESCE(%s::date, CURRENT_DATE), %s, %s, %s::jsonb)
-            """,
-            (
-                session_payload["company_id"],
-                case_id,
-                movement.get("code"),
-                _movement_date(movement),
-                _movement_title(movement),
-                movement.get("description") or movement.get("descricao"),
-                _json(movement),
-            ),
-        )
-        imported_movements += 1
+    imported_documents, imported_movements = _replace_tribunal_imports(nx, session_payload["company_id"], case_id, documents, movements)
 
     payload["documents_found"] = len(documents)
     payload["documents_downloaded"] = imported_documents
@@ -555,18 +613,24 @@ def diagnose_case_sync(case_id: str, session_payload: dict, payload: dict | None
         if lawyer_id:
             nx.xp_nx.execute(
                 """
-                SELECT id, certificate_name, certificate_type, certificate_access_mode, certificate_provider,
+                SELECT id, lawyer_id, certificate_name, certificate_type, certificate_access_mode, certificate_provider,
                        device_identifier, local_agent_id, cloud_certificate_ref, issuer, valid_until,
                        status, consent_accepted, last_validated_at
                 FROM lawyer_certificates
-                WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
+                WHERE company_id = %s AND deleted_at IS NULL
+                  AND (
+                    lawyer_id = %s
+                    OR lawyer_id IN (
+                        SELECT id FROM lawyers WHERE company_id = %s AND user_id = %s AND deleted_at IS NULL
+                    )
+                  )
                   AND status IN ('valid', 'active')
                   AND consent_accepted = TRUE
                   AND (valid_until IS NULL OR valid_until >= CURRENT_DATE)
                 ORDER BY valid_until NULLS LAST, created_at DESC
                 LIMIT 1
                 """,
-                (session_payload["company_id"], lawyer_id),
+                (session_payload["company_id"], lawyer_id, session_payload["company_id"], lawyer_id),
             )
             certificate = nx.xp_nx.fetchone()
 
@@ -574,10 +638,16 @@ def diagnose_case_sync(case_id: str, session_payload: dict, payload: dict | None
                 """
                 SELECT COUNT(*) AS total
                 FROM lawyer_certificates
-                WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
+                WHERE company_id = %s AND deleted_at IS NULL
+                  AND (
+                    lawyer_id = %s
+                    OR lawyer_id IN (
+                        SELECT id FROM lawyers WHERE company_id = %s AND user_id = %s AND deleted_at IS NULL
+                    )
+                  )
                   AND valid_until IS NOT NULL AND valid_until < CURRENT_DATE
                 """,
-                (session_payload["company_id"], lawyer_id),
+                (session_payload["company_id"], lawyer_id, session_payload["company_id"], lawyer_id),
             )
             expired_certificates = int((nx.xp_nx.fetchone() or {}).get("total") or 0)
 
@@ -734,6 +804,224 @@ def sync_case(case_id: str, source: str, session_payload: dict, payload: dict) -
     finally:
         nx.stop()
 
+    return r
+
+
+def register_certificate_agent(session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "integrations.write"):
+        r.make_error(403, "Permissao insuficiente para registrar agente")
+        return r
+
+    name = str(payload.get("name") or "Agente local A3").strip()
+    agent_key = str(payload.get("agent_key") or _court_slug(name) or f"agent-{secrets.token_hex(4)}").strip()
+    token = secrets.token_urlsafe(32)
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+    try:
+        nx.xp_nx.execute(
+            """
+            INSERT INTO certificate_agents (company_id, name, agent_key, token_hash, status, metadata, created_by)
+            VALUES (%s, %s, %s, %s, 'active', %s::jsonb, %s)
+            RETURNING id, name, agent_key, status, created_at
+            """,
+            (
+                session_payload["company_id"],
+                name,
+                agent_key,
+                _hash_agent_token(token),
+                _json(payload.get("metadata") or {}),
+                session_payload.get("user_id"),
+            ),
+        )
+        row = dict(nx.xp_nx.fetchone())
+        nx.conn_nx.commit()
+        register_audit_log(session_payload["company_id"], session_payload.get("user_id"), "certificate_agents", str(row["id"]), "register", None, {"agent_key": agent_key})
+        row["agent_token"] = token
+        r.status = True
+        r.message = "Agente local registrado. Guarde o token, ele nao sera exibido novamente."
+        r.data = row
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao registrar agente local", str(exc))
+    finally:
+        nx.stop()
+    return r
+
+
+def _load_certificate_agent(nx, token: str) -> dict | None:
+    nx.xp_nx.execute(
+        """
+        SELECT id, company_id, name, agent_key, status
+        FROM certificate_agents
+        WHERE token_hash = %s AND status IN ('active', 'online') AND deleted_at IS NULL
+        LIMIT 1
+        """,
+        (_hash_agent_token(token),),
+    )
+    agent = nx.xp_nx.fetchone()
+    return dict(agent) if agent else None
+
+
+def certificate_agent_heartbeat(token: str, payload: dict) -> NXResult:
+    r = NXResult()
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+    try:
+        agent = _load_certificate_agent(nx, token)
+        if not agent:
+            r.make_error(401, "Agente nao autorizado")
+            return r
+        nx.xp_nx.execute(
+            """
+            UPDATE certificate_agents
+            SET status = 'online', last_seen_at = NOW(), metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb, updated_at = NOW()
+            WHERE id = %s
+            RETURNING id, name, agent_key, status, last_seen_at
+            """,
+            (_json(payload.get("metadata") or {}), agent["id"]),
+        )
+        row = dict(nx.xp_nx.fetchone())
+        nx.conn_nx.commit()
+        r.status = True
+        r.message = "Agente online"
+        r.data = row
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro no heartbeat do agente", str(exc))
+    finally:
+        nx.stop()
+    return r
+
+
+def certificate_agent_next_job(token: str) -> NXResult:
+    r = NXResult()
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+    try:
+        agent = _load_certificate_agent(nx, token)
+        if not agent:
+            r.make_error(401, "Agente nao autorizado")
+            return r
+        nx.xp_nx.execute(
+            """
+            UPDATE certificate_agents
+            SET status = 'online', last_seen_at = NOW(), updated_at = NOW()
+            WHERE id = %s
+            """,
+            (agent["id"],),
+        )
+        nx.xp_nx.execute(
+            """
+            UPDATE certificate_agent_jobs
+            SET status = 'running', agent_id = %s, locked_at = NOW(), updated_at = NOW()
+            WHERE id = (
+                SELECT id
+                FROM certificate_agent_jobs
+                WHERE company_id = %s
+                  AND deleted_at IS NULL
+                  AND status = 'pending'
+                  AND (agent_id = %s OR assigned_agent_key = %s)
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            RETURNING id, case_id, lawyer_id, certificate_id, connector_id, assigned_agent_key,
+                      job_type, status, request_payload, created_at
+            """,
+            (agent["id"], agent["company_id"], agent["id"], agent["agent_key"]),
+        )
+        job = nx.xp_nx.fetchone()
+        nx.conn_nx.commit()
+        r.status = True
+        r.message = "Job carregado" if job else "Nenhum job pendente"
+        r.data = dict(job) if job else None
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao carregar job do agente", str(exc))
+    finally:
+        nx.stop()
+    return r
+
+
+def certificate_agent_complete_job(token: str, job_id: str, payload: dict) -> NXResult:
+    r = NXResult()
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+    try:
+        agent = _load_certificate_agent(nx, token)
+        if not agent:
+            r.make_error(401, "Agente nao autorizado")
+            return r
+        nx.xp_nx.execute(
+            """
+            SELECT id, company_id, case_id, lawyer_id, certificate_id, connector_id, assigned_agent_key, request_payload
+            FROM certificate_agent_jobs
+            WHERE id = %s AND company_id = %s AND deleted_at IS NULL
+              AND (agent_id = %s OR assigned_agent_key = %s)
+            LIMIT 1
+            """,
+            (job_id, agent["company_id"], agent["id"], agent["agent_key"]),
+        )
+        job = nx.xp_nx.fetchone()
+        if not job:
+            r.make_error(404, "Job nao localizado para este agente")
+            return r
+
+        status = "failed" if payload.get("error") else "completed"
+        response_payload = payload.get("response") or payload
+        documents = response_payload.get("documents") or []
+        movements = response_payload.get("movements") or []
+        imported_documents = imported_movements = 0
+        if status == "completed":
+            imported_documents, imported_movements = _replace_tribunal_imports(nx, agent["company_id"], str(job["case_id"]), documents, movements)
+
+        nx.xp_nx.execute(
+            """
+            UPDATE certificate_agent_jobs
+            SET status = %s, response_payload = %s::jsonb, error_message = %s,
+                completed_at = NOW(), updated_at = NOW()
+            WHERE id = %s
+            RETURNING id, status, completed_at
+            """,
+            (status, _json(response_payload), payload.get("error"), job_id),
+        )
+        updated_job = dict(nx.xp_nx.fetchone())
+        log_payload = {
+            "lawyer_id": str(job["lawyer_id"]) if job.get("lawyer_id") else None,
+            "court_system": (job.get("request_payload") or {}).get("body", {}).get("court_system"),
+            "documents_found": len(documents),
+            "documents_downloaded": imported_documents,
+            "movements_imported": imported_movements,
+        }
+        log_row = _insert_sync_log(
+            nx,
+            {"company_id": agent["company_id"], "user_id": None},
+            str(job["case_id"]),
+            "tribunal",
+            log_payload,
+            {"agent_id": str(agent["id"]), "agent_job_id": str(job["id"]), "response": response_payload},
+            "success" if status == "completed" else "error",
+            payload.get("error"),
+        )
+        nx.conn_nx.commit()
+        register_audit_log(agent["company_id"], None, "certificate_agent_jobs", str(job_id), status, None, {"sync_log_id": str(log_row["id"])})
+        r.status = True
+        r.message = "Job concluido e importado" if status == "completed" else "Job finalizado com erro"
+        r.data = {"job": updated_job, "log": dict(log_row), "documents_imported": imported_documents, "movements_imported": imported_movements}
+    except Exception as exc:
+        nx.conn_nx.rollback()
+        r.make_error(0, "Erro ao concluir job do agente", str(exc))
+    finally:
+        nx.stop()
     return r
 
 

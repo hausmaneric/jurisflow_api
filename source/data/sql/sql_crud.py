@@ -119,6 +119,20 @@ RESOURCE_SELECT = {
         WHERE company_id = %s AND deleted_at IS NULL
         ORDER BY created_at DESC
     """,
+    "certificate_agents": """
+        SELECT id, company_id, name, agent_key, status, last_seen_at, metadata, created_by, created_at, updated_at
+        FROM certificate_agents
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
+    "certificate_agent_jobs": """
+        SELECT id, company_id, case_id, lawyer_id, certificate_id, connector_id, agent_id,
+               assigned_agent_key, job_type, status, request_payload, response_payload,
+               error_message, locked_at, completed_at, created_by, created_at, updated_at
+        FROM certificate_agent_jobs
+        WHERE company_id = %s AND deleted_at IS NULL
+        ORDER BY created_at DESC
+    """,
     "automation_rules": """
         SELECT id, company_id, name, trigger_type, conditions, actions, active, created_by, created_at, updated_at
         FROM automation_rules

@@ -29,6 +29,72 @@ Campos principais:
 
 Nesse modo, o conector do tribunal deve chamar um agente local ou ponte segura instalada na maquina onde o token esta conectado. O agente faz a assinatura/autenticacao localmente e devolve apenas o resultado autorizado.
 
+### Fluxo com agente local A3
+
+1. Um administrador registra o agente local:
+
+```http
+POST /api/v1/certificate-agents/register
+Authorization: Bearer <token_usuario>
+```
+
+Exemplo:
+
+```json
+{
+  "name": "Agente escritorio SP",
+  "agent_key": "escritorio-sp-01"
+}
+```
+
+A resposta traz `agent_token` uma unica vez. Esse token fica instalado no agente local.
+
+2. O certificado A3 do advogado usa:
+
+```json
+{
+  "certificate_type": "A3",
+  "certificate_access_mode": "token_a3_local",
+  "device_identifier": "token-oab-joao",
+  "local_agent_id": "escritorio-sp-01"
+}
+```
+
+3. Ao consultar tribunal com A3, a API cria um job pendente em `certificate_agent_jobs`.
+
+4. O agente local busca o job:
+
+```http
+GET /api/v1/certificate-agents/jobs/next
+Authorization: Bearer <agent_token>
+```
+
+5. O agente executa a consulta no ambiente local onde o token USB/smartcard esta conectado.
+
+6. O agente devolve o resultado:
+
+```http
+POST /api/v1/certificate-agents/jobs/{job_id}/complete
+Authorization: Bearer <agent_token>
+```
+
+Corpo esperado:
+
+```json
+{
+  "documents": [],
+  "movements": []
+}
+```
+
+Se houver erro:
+
+```json
+{
+  "error": "Descricao do erro no tribunal ou no token"
+}
+```
+
 ## Certificado em nuvem/provedor
 
 Use quando a assinatura/autenticacao ocorre via provedor externo.
