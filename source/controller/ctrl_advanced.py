@@ -11,12 +11,14 @@ from source.logic.orb_advanced import (
     export_transcription_note,
     generate_transcription_tasks,
     check_in_appointment,
+    list_datajud_courts,
     link_lawyer_user,
     list_transcription_segments,
     process_transcription,
     register_certificate_agent,
     review_transcription,
     summarize_transcription,
+    search_datajud_records,
     sync_case,
     update_transcription_status,
     upload_transcription_file,
@@ -129,6 +131,24 @@ def case_sync_full(case_id):
     if error:
         return error
     r = sync_case(case_id, "full", session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/datajud/courts", methods=["GET"])
+def datajud_courts():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = list_datajud_courts(session_payload)
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/datajud/search", methods=["POST"])
+def datajud_search():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = search_datajud_records(session_payload, request.get_json(silent=True) or {})
     return r.toJSON(), (200 if r.status else 400)
 
 

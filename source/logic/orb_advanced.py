@@ -57,6 +57,26 @@ CNJ_STATE_COURTS = {
     "27": "tjto",
 }
 
+DATAJUD_COURTS = {
+    "stj", "stm", "tse", "tst", "tre",
+    "trf1", "trf2", "trf3", "trf4", "trf5", "trf6",
+    "tjac", "tjal", "tjam", "tjap", "tjba", "tjce", "tjdft", "tjes", "tjgo", "tjma",
+    "tjmg", "tjmmg", "tjmrs", "tjms", "tjmsp", "tjmt", "tjpa", "tjpb", "tjpe",
+    "tjpi", "tjpr", "tjrj", "tjrn", "tjro", "tjrr", "tjrs", "tjsc", "tjse", "tjsp", "tjto",
+    *{f"trt{item}" for item in range(1, 25)},
+}
+
+DATAJUD_COURT_ALIASES = {
+    **{f"api_publica_{court}": court for court in DATAJUD_COURTS},
+    "tjdf": "tjdft",
+    "df": "tjdft",
+    "justicaeleitoral": "tse",
+    "eleitoral": "tse",
+    "justicadotrabalho": "tst",
+    "trabalho": "tst",
+    "justicafederal": "trf1",
+}
+
 
 def _digits(value: str | None) -> str:
     return "".join(ch for ch in str(value or "") if ch.isdigit())
@@ -77,7 +97,71 @@ def _safe_int(value, default: int = 0) -> int:
 
 
 def _court_slug(value: str | None) -> str:
-    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    value = re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+    return DATAJUD_COURT_ALIASES.get(value, value)
+
+
+def _datajud_api_key() -> str:
+    return str(appConfig.datajudApiKey or "").strip()
+
+
+def _datajud_endpoint(court: str) -> str:
+    court = _court_slug(court)
+    if court not in DATAJUD_COURTS:
+        raise RuntimeError(f"Tribunal DataJud invalido ou nao suportado: {court}")
+    return f"{appConfig.datajudBaseUrl.rstrip('/')}/api_publica_{court}/_search"
+
+
+def _datajud_request_body(payload: dict, process_number: str | None = None) -> dict:
+    body = payload.get("query_dsl") or payload.get("dsl") or payload.get("body")
+    if isinstance(body, str):
+        body = json.loads(body)
+    if not isinstance(body, dict):
+        number = _digits(payload.get("numeroProcesso") or payload.get("case_number") or process_number)
+        if len(number) != 20:
+            raise RuntimeError("Informe um numeroProcesso/CNJ com 20 digitos ou um query_dsl valido")
+        body = {"query": {"match": {"numeroProcesso": number}}}
+
+    size = _safe_int(payload.get("size") or body.get("size"), 10)
+    body["size"] = max(1, min(size, 10000))
+    if payload.get("sort") is not None:
+        body["sort"] = payload["sort"]
+    if payload.get("search_after") is not None:
+        body["search_after"] = payload["search_after"]
+    if payload.get("search_after") is not None and not body.get("sort"):
+        body["sort"] = [{"@timestamp": {"order": "asc"}}]
+    return body
+
+
+def _datajud_search(court: str, body: dict) -> dict:
+    api_key = _datajud_api_key()
+    if not api_key:
+        raise RuntimeError("JURISFLOW_DATAJUD_API_KEY nao configurada")
+
+    endpoint = _datajud_endpoint(court)
+    response = requests.post(
+        endpoint,
+        headers={"Authorization": f"APIKey {api_key}", "Content-Type": "application/json"},
+        json=body,
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(f"DataJud retornou HTTP {response.status_code}: {response.text[:500]}")
+    data = response.json()
+    hits = data.get("hits", {}).get("hits", [])
+    last_sort = hits[-1].get("sort") if hits else None
+    total = data.get("hits", {}).get("total", 0)
+    if isinstance(total, dict):
+        total = total.get("value", 0)
+    return {
+        "court": _court_slug(court),
+        "endpoint": endpoint,
+        "request": body,
+        "response": data,
+        "hits": hits,
+        "total": total,
+        "next_search_after": last_sort,
+    }
 
 
 def _infer_datajud_court(case_row: dict, payload: dict) -> str:
@@ -88,7 +172,7 @@ def _infer_datajud_court(case_row: dict, payload: dict) -> str:
     court_text = _court_slug(case_row.get("court"))
     known = [
         "tjsp", "tjrj", "tjmg", "tjrs", "tjpr", "tjsc", "tjba", "tjgo", "tjpe", "tjce",
-        "trf1", "trf2", "trf3", "trf4", "trf5", "trf6", "tst", "tse", "stm", "stj",
+        "trf1", "trf2", "trf3", "trf4", "trf5", "trf6", "tst", "tse", "stm", "stj", "tre",
     ]
     for item in known:
         if item in court_text:
@@ -104,6 +188,8 @@ def _infer_datajud_court(case_row: dict, payload: dict) -> str:
             return f"trf{int(court_code)}" if court_code.isdigit() else ""
         if justice_branch == "5":
             return "trt" + court_code.lstrip("0")
+        if justice_branch == "6":
+            return "tre"
 
     return ""
 
@@ -116,6 +202,7 @@ def _datajud_court_label(court: str) -> str:
         "tst": "Tribunal Superior do Trabalho",
         "tse": "Tribunal Superior Eleitoral",
         "stm": "Superior Tribunal Militar",
+        "tre": "Tribunais Regionais Eleitorais",
     }
     if court in labels:
         return labels[court]
@@ -238,37 +325,15 @@ def _replace_tribunal_imports(nx, company_id: str, case_id: str, documents: list
 
 
 def _call_datajud(case_row: dict, payload: dict) -> dict:
-    if not appConfig.datajudApiKey:
-        raise RuntimeError("JURISFLOW_DATAJUD_API_KEY nao configurada")
-
     court = _infer_datajud_court(case_row, payload)
     if not court:
         raise RuntimeError("Nao foi possivel identificar o tribunal DataJud do processo")
 
     process_number = _digits(payload.get("case_number") or case_row.get("case_number"))
-    if len(process_number) < 20:
+    if len(process_number) != 20:
         raise RuntimeError("Numero do processo invalido para consulta DataJud")
 
-    endpoint = f"{appConfig.datajudBaseUrl.rstrip('/')}/api_publica_{court}/_search"
-    body = {
-        "query": {
-            "match": {
-                "numeroProcesso": process_number
-            }
-        },
-        "size": _safe_int(payload.get("size"), 10),
-    }
-    response = requests.post(
-        endpoint,
-        headers={"Authorization": f"APIKey {appConfig.datajudApiKey}", "Content-Type": "application/json"},
-        json=body,
-        timeout=30,
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"DataJud retornou HTTP {response.status_code}: {response.text[:500]}")
-    data = response.json()
-    hits = data.get("hits", {}).get("hits", [])
-    return {"court": court, "endpoint": endpoint, "request": body, "response": data, "hits": hits}
+    return _datajud_search(court, _datajud_request_body(payload, process_number))
 
 
 def _sync_datajud_case(nx, case_id: str, case_row: dict, session_payload: dict, payload: dict) -> dict:
@@ -804,6 +869,80 @@ def sync_case(case_id: str, source: str, session_payload: dict, payload: dict) -
     finally:
         nx.stop()
 
+    return r
+
+
+def list_datajud_courts(session_payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "sync.read"):
+        r.make_error(403, "Permissao insuficiente para listar tribunais DataJud")
+        return r
+
+    courts = []
+    for court in sorted(DATAJUD_COURTS):
+        courts.append({
+            "court": court,
+            "alias": f"api_publica_{court}",
+            "label": _datajud_court_label(court),
+            "endpoint": _datajud_endpoint(court),
+        })
+    r.status = True
+    r.message = "Tribunais DataJud carregados"
+    r.data = {
+        "base_url": appConfig.datajudBaseUrl,
+        "auth_header": "Authorization: APIKey <chave publica CNJ>",
+        "courts": courts,
+    }
+    return r
+
+
+def search_datajud_records(session_payload: dict, payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "sync.read"):
+        r.make_error(403, "Permissao insuficiente para consultar DataJud")
+        return r
+
+    try:
+        court = payload.get("court") or payload.get("tribunal") or payload.get("datajud_court") or payload.get("court_code")
+        if not court:
+            case_like = {"case_number": payload.get("case_number") or payload.get("numeroProcesso"), "court": payload.get("court_name")}
+            court = _infer_datajud_court(case_like, payload)
+        if not court:
+            raise RuntimeError("Informe o tribunal DataJud ou um numero CNJ que permita identificar o tribunal")
+
+        body = _datajud_request_body(payload, payload.get("case_number") or payload.get("numeroProcesso"))
+        result = _datajud_search(court, body)
+        normalized_hits = []
+        for hit in result["hits"]:
+            source = _extract_source(hit)
+            normalized_hits.append({
+                "id": hit.get("_id"),
+                "index": hit.get("_index"),
+                "score": hit.get("_score"),
+                "sort": hit.get("sort"),
+                "numeroProcesso": source.get("numeroProcesso"),
+                "classe": source.get("classe"),
+                "tribunal": source.get("tribunal") or source.get("siglaTribunal") or result["court"].upper(),
+                "orgaoJulgador": source.get("orgaoJulgador"),
+                "grau": source.get("grau"),
+                "dataAjuizamento": source.get("dataAjuizamento"),
+                "movimentos": _extract_movements(source),
+                "raw": source,
+            })
+        r.status = True
+        r.message = "Consulta DataJud concluida"
+        r.data = {
+            "court": result["court"],
+            "court_label": _datajud_court_label(result["court"]),
+            "endpoint": result["endpoint"],
+            "request": result["request"],
+            "total": result["total"],
+            "count": len(result["hits"]),
+            "next_search_after": result["next_search_after"],
+            "hits": normalized_hits,
+        }
+    except Exception as exc:
+        r.make_error(0, "Erro ao consultar DataJud", str(exc))
     return r
 
 

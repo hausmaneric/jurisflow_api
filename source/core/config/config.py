@@ -3,6 +3,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+DATAJUD_PUBLIC_API_KEY = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
+
 try:
     from dotenv import load_dotenv
 except ImportError:  # pragma: no cover
@@ -27,7 +29,7 @@ class AppConfig:
     jwtExpiresHours: int = 12
     publicBaseUrl: str = ""
     storageRoot: str = "storage"
-    datajudApiKey: str = ""
+    datajudApiKey: str = DATAJUD_PUBLIC_API_KEY
     datajudBaseUrl: str = "https://api-publica.datajud.cnj.jus.br"
     transcriptionProvider: str = "manual"
     whisperWorkerUrl: str = ""
