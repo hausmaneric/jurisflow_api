@@ -18,9 +18,11 @@
 - definir `JURISFLOW_SECRET_KEY`
 - definir `JURISFLOW_SETUP_KEY`
 - definir `JURISFLOW_DATAJUD_API_KEY` para consulta processual publica gratuita no CNJ/DataJud
-- opcional: `JURISFLOW_DATAJUD_BASE_URL` quando houver proxy corporativo
+- usar `JURISFLOW_DATAJUD_BASE_URL=https://api-publica.datajud.cnj.jus.br`
+- a API publica do DataJud usa endpoints no formato `api_publica_<tribunal>/_search` e header `Authorization: APIKey <chave>`
 - definir `JURISFLOW_TRANSCRIPTION_PROVIDER=manual` ou `whisper_worker`
 - para transcricao automatica sem OpenAI: `JURISFLOW_WHISPER_WORKER_URL` e, se houver autenticacao, `JURISFLOW_WHISPER_WORKER_TOKEN`
+- para consulta em tribunal com certificado, cadastrar o A1 do advogado em `lawyer_certificates` e o conector real em `court_connectors`
 - evitar segredos reais em `_config.server.json`
 
 ## Verificacoes apos deploy

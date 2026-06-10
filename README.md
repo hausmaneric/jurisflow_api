@@ -63,3 +63,30 @@ As pastas abaixo existem para manter o mesmo padrao estrutural do projeto de ref
 - `.env.example`: variaveis recomendadas
 
 Em producao, prefira `JURISFLOW_DATABASE_URL` fornecida pelo PostgreSQL do Railway.
+
+## Integracoes de producao
+
+### Consulta processual DataJud
+
+- Documentacao oficial: https://datajud-wiki.cnj.jus.br/api-publica/
+- Base padrao: `https://api-publica.datajud.cnj.jus.br`
+- Endpoint usado pela API: `api_publica_<tribunal>/_search`
+- Header: `Authorization: APIKey <JURISFLOW_DATAJUD_API_KEY>`
+
+A chave `JURISFLOW_DATAJUD_API_KEY` deve ser obtida no ecossistema oficial do CNJ. Ela nao deve ser versionada.
+
+### Consulta no tribunal com certificado
+
+A API esta preparada para consultar DataJud primeiro e, depois, o tribunal correto quando houver:
+
+- certificado A1 valido do advogado em `lawyer_certificates`
+- consentimento registrado
+- conector ativo em `court_connectors`
+- endpoint real do PJe/e-SAJ/eproc/Projudi ou middleware contratado
+
+Cada tribunal possui regras proprias de autenticacao, certificado e disponibilidade. Por isso o JurisFlow usa conectores configuraveis.
+
+### Transcricao sem OpenAI
+
+A API aceita `JURISFLOW_TRANSCRIPTION_PROVIDER=whisper_worker` e chama um worker separado por HTTP.
+Um worker pronto para deploy esta em `transcription_worker/`, usando `faster-whisper` e diarizacao opcional com Pyannote.
