@@ -245,12 +245,14 @@ def _default_connector_payload(court: str, sync_endpoint: str | None = None) -> 
             "datajud_alias": f"api_publica_{court}",
             "system_family": _court_system_family(court),
             "sync_endpoint": bridge_url,
+            "local_sync_endpoint": bridge_url,
+            "server_sync_endpoint": "",
             "requires_local_agent": True,
             "certificate_modes": ["token_a3_local", "cloud_provider", "file_a1"],
             "expected_response": {"documents": [], "movements": []},
             "notes": (
-                "Conector padrao para ponte local: o Railway nao acessa o token/certificado. "
-                "O agente local chama este endpoint no computador autorizado e devolve apenas o resultado."
+                "Conector padrao hibrido: A1 por arquivo pode usar agente local ou endpoint remoto configurado; "
+                "A3/token fisico sempre usa agente local. O Railway nao acessa token, PIN ou chave privada."
             ),
         },
     }
@@ -507,7 +509,19 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
     settings = connector.get("settings") or {}
     if isinstance(settings, str):
         settings = json.loads(settings or "{}")
-    endpoint = str(settings.get("sync_endpoint") or connector["base_url"]).rstrip("/")
+    use_local_agent = bool(
+        payload.get("use_local_agent")
+        or settings.get("requires_local_agent")
+        or (certificate_access_mode == "token_a3_local" and not settings.get("allow_server_side_a3"))
+    )
+    if certificate_access_mode == "file_a1" and settings.get("server_sync_endpoint") and not payload.get("use_local_agent"):
+        use_local_agent = False
+
+    endpoint = str(
+        (settings.get("local_sync_endpoint") if use_local_agent else settings.get("server_sync_endpoint"))
+        or settings.get("sync_endpoint")
+        or connector["base_url"]
+    ).rstrip("/")
     body = {
         "case_number": _digits(case_row.get("case_number")),
         "case_id": str(case_id),
@@ -527,10 +541,10 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
     headers = {"Content-Type": "application/json"}
     if settings.get("api_key"):
         headers["Authorization"] = f"Bearer {settings['api_key']}"
-    if certificate_access_mode == "token_a3_local" and not settings.get("allow_server_side_a3"):
-        assigned_agent_key = certificate.get("local_agent_id") or certificate.get("device_identifier")
+    if use_local_agent:
+        assigned_agent_key = payload.get("local_agent_id") or payload.get("agent_key") or certificate.get("local_agent_id") or certificate.get("device_identifier")
         if not assigned_agent_key:
-            raise RuntimeError("Certificado A3 sem agente local configurado")
+            raise RuntimeError(f"Certificado {certificate_access_mode} sem agente local configurado")
         nx.xp_nx.execute(
             """
             INSERT INTO certificate_agent_jobs (
@@ -553,7 +567,7 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
         )
         job = nx.xp_nx.fetchone()
         payload["court_system"] = connector.get("court_system")
-        payload["error_message"] = "Consulta aguardando agente local A3"
+        payload["error_message"] = f"Consulta aguardando agente local para certificado {certificate_access_mode}"
         log_row = _insert_sync_log(
             nx,
             session_payload,
@@ -562,7 +576,7 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
             payload,
             {"connector_id": str(connector["id"]), "agent_job_id": str(job["id"]), "access_mode": certificate_access_mode},
             "pending",
-            "Consulta aguardando agente local A3",
+            payload["error_message"],
         )
         return {"log": dict(log_row), "agent_job": dict(job), "status": "pending_agent"}
 
