@@ -67,7 +67,9 @@ RESOURCE_SELECT = {
         ORDER BY created_at DESC
     """,
     "lawyer_certificates": """
-        SELECT id, company_id, lawyer_id, certificate_name, certificate_file_url, certificate_type, issuer,
+        SELECT id, company_id, lawyer_id, certificate_name, certificate_file_url, certificate_type,
+               certificate_access_mode, certificate_provider, device_identifier, local_agent_id,
+               cloud_certificate_ref, metadata, issuer,
                valid_from, valid_until, status, consent_accepted, consent_text, last_validated_at, created_by,
                created_at, updated_at
         FROM lawyer_certificates

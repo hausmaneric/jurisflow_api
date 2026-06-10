@@ -288,7 +288,9 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
 
     nx.xp_nx.execute(
         """
-        SELECT id, certificate_name, certificate_type, certificate_file_url, status, valid_until, consent_accepted
+        SELECT id, certificate_name, certificate_type, certificate_access_mode, certificate_file_url,
+               certificate_provider, device_identifier, local_agent_id, cloud_certificate_ref,
+               metadata, status, valid_until, consent_accepted
         FROM lawyer_certificates
         WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
           AND status IN ('valid', 'active')
@@ -302,6 +304,9 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
     certificate = nx.xp_nx.fetchone()
     if not certificate:
         raise RuntimeError("Advogado sem certificado ativo, valido e autorizado")
+    certificate_access_mode = certificate.get("certificate_access_mode") or "file_a1"
+    if certificate_access_mode == "file_a1" and not certificate.get("certificate_file_url"):
+        raise RuntimeError("Certificado A1 sem arquivo seguro configurado")
 
     court_system = payload.get("court_system") or payload.get("court_code") or _infer_datajud_court(case_row, payload)
     nx.xp_nx.execute(
@@ -332,7 +337,13 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
         "certificate": {
             "id": str(certificate["id"]),
             "type": certificate.get("certificate_type"),
+            "access_mode": certificate_access_mode,
+            "provider": certificate.get("certificate_provider"),
             "file_url": certificate.get("certificate_file_url"),
+            "device_identifier": certificate.get("device_identifier"),
+            "local_agent_id": certificate.get("local_agent_id"),
+            "cloud_certificate_ref": certificate.get("cloud_certificate_ref"),
+            "metadata": certificate.get("metadata") or {},
         },
     }
     headers = {"Content-Type": "application/json"}
@@ -477,12 +488,19 @@ def validate_lawyer_certificates(lawyer_id: str, session_payload: dict, payload:
             UPDATE lawyer_certificates
             SET status = CASE
                     WHEN valid_until IS NOT NULL AND valid_until < CURRENT_DATE THEN 'expired'
+                    WHEN COALESCE(certificate_access_mode, 'file_a1') = 'file_a1'
+                         AND COALESCE(certificate_file_url, '') = '' THEN 'invalid_config'
+                    WHEN COALESCE(certificate_access_mode, 'file_a1') = 'cloud_provider'
+                         AND COALESCE(cloud_certificate_ref, '') = ''
+                         AND COALESCE(certificate_provider, '') = '' THEN 'invalid_config'
                     ELSE 'valid'
                 END,
                 last_validated_at = NOW(),
                 updated_at = NOW()
             WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL{certificate_filter}
-            RETURNING id, lawyer_id, certificate_name, certificate_type, issuer, valid_from, valid_until, status, last_validated_at
+            RETURNING id, lawyer_id, certificate_name, certificate_type, certificate_access_mode,
+                      certificate_provider, device_identifier, local_agent_id, cloud_certificate_ref,
+                      issuer, valid_from, valid_until, status, last_validated_at
             """,
             tuple(params),
         )
@@ -537,7 +555,9 @@ def diagnose_case_sync(case_id: str, session_payload: dict, payload: dict | None
         if lawyer_id:
             nx.xp_nx.execute(
                 """
-                SELECT id, certificate_name, certificate_type, issuer, valid_until, status, consent_accepted, last_validated_at
+                SELECT id, certificate_name, certificate_type, certificate_access_mode, certificate_provider,
+                       device_identifier, local_agent_id, cloud_certificate_ref, issuer, valid_until,
+                       status, consent_accepted, last_validated_at
                 FROM lawyer_certificates
                 WHERE company_id = %s AND lawyer_id = %s AND deleted_at IS NULL
                   AND status IN ('valid', 'active')
@@ -607,7 +627,10 @@ def diagnose_case_sync(case_id: str, session_payload: dict, payload: dict | None
                 "key": "lawyer_certificate",
                 "label": "Certificado valido autorizado",
                 "ready": bool(certificate),
-                "message": "Certificado pronto para uso" if certificate else "Cadastre, autorize e valide o certificado do advogado",
+                "message": (
+                    f"Certificado pronto para uso via {certificate.get('certificate_access_mode') or 'file_a1'}"
+                    if certificate else "Cadastre, autorize e valide o certificado do advogado"
+                ),
             },
             {
                 "key": "court_connector",

@@ -92,7 +92,7 @@ RESOURCE_CONFIG = {
         "permission_read": "lawyers.read",
         "permission_write": "lawyers.write",
         "required": ["lawyer_id", "certificate_name"],
-        "fields": ["lawyer_id", "certificate_name", "certificate_file_url", "certificate_password_secret", "certificate_type", "issuer", "valid_from", "valid_until", "status", "consent_accepted", "consent_text", "last_validated_at", "created_by"],
+        "fields": ["lawyer_id", "certificate_name", "certificate_file_url", "certificate_password_secret", "certificate_type", "certificate_access_mode", "certificate_provider", "device_identifier", "local_agent_id", "cloud_certificate_ref", "metadata", "issuer", "valid_from", "valid_until", "status", "consent_accepted", "consent_text", "last_validated_at", "created_by"],
         "soft_delete": True,
     },
     "cases": {

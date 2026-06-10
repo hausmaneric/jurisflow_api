@@ -22,7 +22,8 @@
 - a API publica do DataJud usa endpoints no formato `api_publica_<tribunal>/_search` e header `Authorization: APIKey <chave>`
 - definir `JURISFLOW_TRANSCRIPTION_PROVIDER=manual` ou `whisper_worker`
 - para transcricao automatica sem OpenAI: `JURISFLOW_WHISPER_WORKER_URL` e, se houver autenticacao, `JURISFLOW_WHISPER_WORKER_TOKEN`
-- para consulta em tribunal com certificado, cadastrar o A1 do advogado em `lawyer_certificates` e o conector real em `court_connectors`
+- para consulta em tribunal com certificado, cadastrar A1 por arquivo seguro ou A3/token/provedor em `lawyer_certificates` e o conector real em `court_connectors`
+- para A3/token USB/smartcard, configurar um agente local ou provedor no conector; a API nao recebe a chave privada nem exige arquivo do certificado
 - evitar segredos reais em `_config.server.json`
 
 ## Verificacoes apos deploy

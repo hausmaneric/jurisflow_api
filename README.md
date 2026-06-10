@@ -79,12 +79,13 @@ A chave `JURISFLOW_DATAJUD_API_KEY` deve ser obtida no ecossistema oficial do CN
 
 A API esta preparada para consultar DataJud primeiro e, depois, o tribunal correto quando houver:
 
-- certificado A1 valido do advogado em `lawyer_certificates`
+- certificado A1 por arquivo seguro ou A3/token/provedor em `lawyer_certificates`
 - consentimento registrado
 - conector ativo em `court_connectors`
 - endpoint real do PJe/e-SAJ/eproc/Projudi ou middleware contratado
 
 Cada tribunal possui regras proprias de autenticacao, certificado e disponibilidade. Por isso o JurisFlow usa conectores configuraveis.
+Para A3/token USB ou smartcard, a chave privada nao e enviada para a API; o conector deve acionar agente local ou provedor externo. Veja `docs/certificados-e-tribunais.md`.
 
 ### Transcricao sem OpenAI
 
