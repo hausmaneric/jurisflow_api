@@ -1,26 +1,10 @@
-from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
 
-from flask import request, send_from_directory
-from werkzeug.utils import secure_filename
+from flask import redirect, request, send_from_directory
 
 from source.app import app
-from source.core.config.config import appConfig
+from source.core.system.storage import signed_download_url, storage_root, upload_file
 from source.core.system.utils import NXResult, get_session_payload
-
-
-def _storage_root() -> Path:
-    root = Path(appConfig.storageRoot or "storage")
-    if not root.is_absolute():
-        root = Path(__file__).resolve().parents[3] / root
-    return root
-
-
-def _public_file_url(relative_path: str) -> str:
-    base_url = (appConfig.publicBaseUrl or request.host_url.rstrip("/")).rstrip("/")
-    normalized = relative_path.replace("\\", "/")
-    return f"{base_url}/api/v1/uploads/{normalized}"
 
 
 @app.route("/api/v1/documents/upload", methods=["POST"])
@@ -38,34 +22,46 @@ def documents_upload():
         r.make_error(0, "Arquivo nao informado")
         return r.toJSON(), 400
 
-    original_name = secure_filename(file.filename)
-    extension = Path(original_name).suffix.lower()
-    timestamp = datetime.utcnow().strftime("%Y/%m/%d")
-    company_id = str(session_payload.get("company_id") or "public")
-    unique_name = f"{uuid4().hex}{extension}"
-    relative_dir = Path("documents") / company_id / timestamp
-    target_dir = _storage_root() / relative_dir
-    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        stored = upload_file(file, str(session_payload.get("company_id") or "public"), "documents")
+        r.status = True
+        r.message = "Arquivo enviado com sucesso"
+        r.data = stored.__dict__
+        return r.toJSON(), 200
+    except Exception as exc:
+        r.make_error(0, "Erro ao enviar arquivo", str(exc))
+        return r.toJSON(), 400
 
-    target_path = target_dir / unique_name
-    file.save(target_path)
 
-    relative_path = (relative_dir / unique_name).as_posix()
-    r.status = True
-    r.message = "Arquivo enviado com sucesso"
-    r.data = {
-        "file_name": original_name,
-        "file_path": relative_path,
-        "file_url": _public_file_url(relative_path),
-        "file_type": extension.replace(".", "").upper() or "FILE",
-        "size_bytes": target_path.stat().st_size,
-    }
-    return r.toJSON(), 200
+@app.route("/api/v1/uploads/<path:relative_path>/signed-url", methods=["GET"])
+def uploaded_file_signed_url(relative_path: str):
+    try:
+        get_session_payload()
+    except Exception as exc:
+        r = NXResult()
+        r.make_error(401, "Falha na autenticacao", str(exc))
+        return r.toJSON(), 401
+
+    r = NXResult()
+    try:
+        r.status = True
+        r.message = "URL assinada gerada com sucesso"
+        r.data = {"file_url": signed_download_url(relative_path)}
+        return r.toJSON(), 200
+    except Exception as exc:
+        r.make_error(0, "Erro ao gerar URL assinada", str(exc))
+        return r.toJSON(), 400
 
 
 @app.route("/api/v1/uploads/<path:relative_path>", methods=["GET"])
 def uploaded_file(relative_path: str):
-    root = _storage_root()
+    if str(relative_path).startswith(("documents/", "certificates/", "transcriptions/")):
+        try:
+            return redirect(signed_download_url(relative_path), code=302)
+        except Exception:
+            pass
+
+    root = storage_root()
     target = (root / relative_path).resolve()
     if not str(target).startswith(str(root.resolve())) or not target.exists() or not target.is_file():
         r = NXResult()

@@ -27,7 +27,11 @@ def _auth_ok() -> bool:
 def _download_file(file_url: str) -> Path:
     if not file_url:
         raise ValueError("file_url e obrigatorio")
-    response = requests.get(file_url, timeout=120)
+    headers = {}
+    token = os.getenv("WHISPER_FILE_DOWNLOAD_TOKEN", "")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    response = requests.get(file_url, headers=headers, timeout=120)
     response.raise_for_status()
     suffix = Path(file_url.split("?")[0]).suffix or ".audio"
     handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)

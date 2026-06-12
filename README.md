@@ -63,6 +63,7 @@ As pastas abaixo existem para manter o mesmo padrao estrutural do projeto de ref
 - `.env.example`: variaveis recomendadas
 
 Em producao, prefira `JURISFLOW_DATABASE_URL` fornecida pelo PostgreSQL do Railway.
+Para arquivos, certificados A1 e audios de transcricao, use `JURISFLOW_STORAGE_MODE=s3` com bucket privado S3/R2/MinIO. Veja `docs/storage-seguro.md`.
 
 ## Integracoes de producao
 
@@ -92,3 +93,9 @@ O conector remoto server-side esta em `server_court_connector/` e deve ser o pad
 
 A API aceita `JURISFLOW_TRANSCRIPTION_PROVIDER=whisper_worker` e chama um worker separado por HTTP.
 Um worker pronto para deploy esta em `transcription_worker/`, usando `faster-whisper` e diarizacao opcional com Pyannote.
+
+### Servicos auxiliares prontos para deploy
+
+- `server_court_connector/`: conector remoto para A1/cofre, certificado em nuvem e middleware contratado de tribunal.
+- `transcription_worker/`: worker Whisper/Pyannote para transcricao sem OpenAI.
+- `local_court_bridge/`: fallback local para A3 USB/token fisico.

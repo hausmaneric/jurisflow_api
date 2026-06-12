@@ -28,7 +28,15 @@ class AppConfig:
     setupKey: str = ""
     jwtExpiresHours: int = 12
     publicBaseUrl: str = ""
+    storageMode: str = "local"
     storageRoot: str = "storage"
+    storagePublicBaseUrl: str = ""
+    s3EndpointUrl: str = ""
+    s3Region: str = "auto"
+    s3Bucket: str = ""
+    s3AccessKeyId: str = ""
+    s3SecretAccessKey: str = ""
+    s3PresignExpiresSeconds: int = 3600
     datajudApiKey: str = DATAJUD_PUBLIC_API_KEY
     datajudBaseUrl: str = "https://api-publica.datajud.cnj.jus.br"
     serverCourtConnectorUrl: str = ""
@@ -64,7 +72,15 @@ def load_runtime_config() -> None:
         "JURISFLOW_SETUP_KEY": os.getenv("JURISFLOW_SETUP_KEY"),
         "JURISFLOW_JWT_EXPIRES_HOURS": os.getenv("JURISFLOW_JWT_EXPIRES_HOURS"),
         "JURISFLOW_PUBLIC_BASE_URL": os.getenv("JURISFLOW_PUBLIC_BASE_URL"),
+        "JURISFLOW_STORAGE_MODE": os.getenv("JURISFLOW_STORAGE_MODE"),
         "JURISFLOW_STORAGE_ROOT": os.getenv("JURISFLOW_STORAGE_ROOT"),
+        "JURISFLOW_STORAGE_PUBLIC_BASE_URL": os.getenv("JURISFLOW_STORAGE_PUBLIC_BASE_URL"),
+        "JURISFLOW_S3_ENDPOINT_URL": os.getenv("JURISFLOW_S3_ENDPOINT_URL"),
+        "JURISFLOW_S3_REGION": os.getenv("JURISFLOW_S3_REGION"),
+        "JURISFLOW_S3_BUCKET": os.getenv("JURISFLOW_S3_BUCKET"),
+        "JURISFLOW_S3_ACCESS_KEY_ID": os.getenv("JURISFLOW_S3_ACCESS_KEY_ID"),
+        "JURISFLOW_S3_SECRET_ACCESS_KEY": os.getenv("JURISFLOW_S3_SECRET_ACCESS_KEY"),
+        "JURISFLOW_S3_PRESIGN_EXPIRES_SECONDS": os.getenv("JURISFLOW_S3_PRESIGN_EXPIRES_SECONDS"),
         "JURISFLOW_DATAJUD_API_KEY": os.getenv("JURISFLOW_DATAJUD_API_KEY"),
         "JURISFLOW_DATAJUD_BASE_URL": os.getenv("JURISFLOW_DATAJUD_BASE_URL"),
         "JURISFLOW_SERVER_COURT_CONNECTOR_URL": os.getenv("JURISFLOW_SERVER_COURT_CONNECTOR_URL"),
@@ -92,7 +108,15 @@ def load_runtime_config() -> None:
     appConfig.setupKey = runtime_data.get("JURISFLOW_SETUP_KEY", appConfig.setupKey)
     appConfig.jwtExpiresHours = int(runtime_data.get("JURISFLOW_JWT_EXPIRES_HOURS", appConfig.jwtExpiresHours))
     appConfig.publicBaseUrl = runtime_data.get("JURISFLOW_PUBLIC_BASE_URL", appConfig.publicBaseUrl)
+    appConfig.storageMode = runtime_data.get("JURISFLOW_STORAGE_MODE", appConfig.storageMode)
     appConfig.storageRoot = runtime_data.get("JURISFLOW_STORAGE_ROOT", appConfig.storageRoot)
+    appConfig.storagePublicBaseUrl = runtime_data.get("JURISFLOW_STORAGE_PUBLIC_BASE_URL", appConfig.storagePublicBaseUrl)
+    appConfig.s3EndpointUrl = runtime_data.get("JURISFLOW_S3_ENDPOINT_URL", appConfig.s3EndpointUrl)
+    appConfig.s3Region = runtime_data.get("JURISFLOW_S3_REGION", appConfig.s3Region)
+    appConfig.s3Bucket = runtime_data.get("JURISFLOW_S3_BUCKET", appConfig.s3Bucket)
+    appConfig.s3AccessKeyId = runtime_data.get("JURISFLOW_S3_ACCESS_KEY_ID", appConfig.s3AccessKeyId)
+    appConfig.s3SecretAccessKey = runtime_data.get("JURISFLOW_S3_SECRET_ACCESS_KEY", appConfig.s3SecretAccessKey)
+    appConfig.s3PresignExpiresSeconds = int(runtime_data.get("JURISFLOW_S3_PRESIGN_EXPIRES_SECONDS", appConfig.s3PresignExpiresSeconds))
     appConfig.datajudApiKey = runtime_data.get("JURISFLOW_DATAJUD_API_KEY", appConfig.datajudApiKey)
     appConfig.datajudBaseUrl = runtime_data.get("JURISFLOW_DATAJUD_BASE_URL", appConfig.datajudBaseUrl)
     appConfig.serverCourtConnectorUrl = runtime_data.get("JURISFLOW_SERVER_COURT_CONNECTOR_URL", appConfig.serverCourtConnectorUrl)

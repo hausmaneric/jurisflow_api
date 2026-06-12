@@ -126,6 +126,8 @@ def health():
             "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
             "server_court_connector_configured": bool(appConfig.serverCourtConnectorUrl),
             "local_court_bridge_url": appConfig.localCourtBridgeUrl,
+            "storage_mode": appConfig.storageMode,
+            "storage_secure_configured": appConfig.storageMode == "s3" and bool(appConfig.s3Bucket),
         },
     }
     return r.toJSON()
@@ -180,6 +182,8 @@ def environment():
         "server_court_connector_configured": bool(appConfig.serverCourtConnectorUrl),
         "server_court_connector_url": appConfig.serverCourtConnectorUrl,
         "local_court_bridge_url": appConfig.localCourtBridgeUrl,
+        "storage_mode": appConfig.storageMode,
+        "storage_secure_configured": appConfig.storageMode == "s3" and bool(appConfig.s3Bucket),
     }
     return r.toJSON()
 
