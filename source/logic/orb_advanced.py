@@ -232,27 +232,33 @@ def _court_system_family(court: str) -> str:
 
 def _default_connector_payload(court: str, sync_endpoint: str | None = None) -> dict:
     court = _court_slug(court)
-    bridge_url = str(sync_endpoint or appConfig.localCourtBridgeUrl).rstrip("/")
+    local_bridge_url = str(appConfig.localCourtBridgeUrl).rstrip("/")
+    server_connector_url = str(sync_endpoint or appConfig.serverCourtConnectorUrl or "").rstrip("/")
+    primary_url = server_connector_url or local_bridge_url
+    requires_local_agent = not bool(server_connector_url)
     return {
         "court_code": court,
         "court_name": _datajud_court_label(court),
         "court_system": court,
-        "base_url": bridge_url,
+        "base_url": primary_url,
         "status": "configured",
         "supports_public_lookup": True,
         "supports_certificate": True,
         "settings": {
             "datajud_alias": f"api_publica_{court}",
             "system_family": _court_system_family(court),
-            "sync_endpoint": bridge_url,
-            "local_sync_endpoint": bridge_url,
-            "server_sync_endpoint": "",
-            "requires_local_agent": True,
-            "certificate_modes": ["token_a3_local", "cloud_provider", "file_a1"],
+            "sync_endpoint": primary_url,
+            "local_sync_endpoint": local_bridge_url,
+            "server_sync_endpoint": server_connector_url,
+            "requires_local_agent": requires_local_agent,
+            "server_first": bool(server_connector_url),
+            "server_supports_certificate_modes": ["file_a1", "cloud_provider"],
+            "local_only_certificate_modes": ["token_a3_local"],
+            "certificate_modes": ["file_a1", "cloud_provider", "token_a3_local"],
             "expected_response": {"documents": [], "movements": []},
             "notes": (
-                "Conector padrao hibrido: A1 por arquivo pode usar agente local ou endpoint remoto configurado; "
-                "A3/token fisico sempre usa agente local. O Railway nao acessa token, PIN ou chave privada."
+                "Conector padrao server-first: A1 por arquivo seguro e certificado em nuvem usam conector remoto. "
+                "A3/token fisico permanece local por limitacao tecnica do dispositivo."
             ),
         },
     }
@@ -509,13 +515,15 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
     settings = connector.get("settings") or {}
     if isinstance(settings, str):
         settings = json.loads(settings or "{}")
-    use_local_agent = bool(
-        payload.get("use_local_agent")
-        or settings.get("requires_local_agent")
-        or (certificate_access_mode == "token_a3_local" and not settings.get("allow_server_side_a3"))
-    )
-    if certificate_access_mode == "file_a1" and settings.get("server_sync_endpoint") and not payload.get("use_local_agent"):
+    server_endpoint = settings.get("server_sync_endpoint")
+    server_modes = set(settings.get("server_supports_certificate_modes") or ["file_a1", "cloud_provider"])
+    use_local_agent = bool(payload.get("use_local_agent"))
+    if certificate_access_mode == "token_a3_local" and not settings.get("allow_server_side_a3"):
+        use_local_agent = True
+    elif server_endpoint and certificate_access_mode in server_modes and not payload.get("use_local_agent"):
         use_local_agent = False
+    elif settings.get("requires_local_agent"):
+        use_local_agent = True
 
     endpoint = str(
         (settings.get("local_sync_endpoint") if use_local_agent else settings.get("server_sync_endpoint"))
@@ -541,6 +549,8 @@ def _sync_tribunal_case(nx, case_id: str, case_row: dict, session_payload: dict,
     headers = {"Content-Type": "application/json"}
     if settings.get("api_key"):
         headers["Authorization"] = f"Bearer {settings['api_key']}"
+    elif not use_local_agent and appConfig.serverCourtConnectorToken:
+        headers["Authorization"] = f"Bearer {appConfig.serverCourtConnectorToken}"
     if use_local_agent:
         assigned_agent_key = payload.get("local_agent_id") or payload.get("agent_key") or certificate.get("local_agent_id") or certificate.get("device_identifier")
         if not assigned_agent_key:

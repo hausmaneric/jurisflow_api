@@ -124,6 +124,7 @@ def health():
             "datajud_configured": bool(appConfig.datajudApiKey),
             "transcription_provider": appConfig.transcriptionProvider,
             "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
+            "server_court_connector_configured": bool(appConfig.serverCourtConnectorUrl),
             "local_court_bridge_url": appConfig.localCourtBridgeUrl,
         },
     }
@@ -176,6 +177,8 @@ def environment():
         "datajud_configured": bool(appConfig.datajudApiKey),
         "transcription_provider": appConfig.transcriptionProvider,
         "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
+        "server_court_connector_configured": bool(appConfig.serverCourtConnectorUrl),
+        "server_court_connector_url": appConfig.serverCourtConnectorUrl,
         "local_court_bridge_url": appConfig.localCourtBridgeUrl,
     }
     return r.toJSON()

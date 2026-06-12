@@ -52,8 +52,18 @@ O endpoint e idempotente: se o conector ja existir para o `court_code`, ele atua
 
 Esses conectores ficam prontos para A1 e A3:
 
-- Para A1, podem usar a ponte local padrao ou um `server_sync_endpoint` remoto seguro configurado depois.
+- Para A1, usam preferencialmente `JURISFLOW_SERVER_COURT_CONNECTOR_URL`, quando configurado.
+- Para certificado em nuvem, usam preferencialmente `JURISFLOW_SERVER_COURT_CONNECTOR_URL`, quando configurado.
 - Para A3/token USB, usam obrigatoriamente a ponte local, pois o token/pen drive precisa estar conectado ao computador autorizado.
+
+Para operar sem depender do cliente, configure o conector remoto:
+
+```text
+JURISFLOW_SERVER_COURT_CONNECTOR_URL=https://seu-conector/tribunal-sync
+JURISFLOW_SERVER_COURT_CONNECTOR_TOKEN=<token forte>
+```
+
+Depois execute novamente `POST /api/v1/court-connectors/seed-defaults`. O seed passa a registrar os tribunais em modo server-first.
 
 O contrato da ponte local deve receber `case_number`, `court_system` e dados do certificado autorizado, e responder:
 
