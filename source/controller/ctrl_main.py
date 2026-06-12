@@ -42,6 +42,8 @@ def _route_catalog() -> list[dict]:
         {"method": "GET/POST", "path": "/api/v1/lawyer-certificates", "purpose": "certificados digitais dos advogados"},
         {"method": "POST", "path": "/api/v1/lawyers/<lawyer_id>/certificates/validate", "purpose": "valida metadados do certificado digital"},
         {"method": "POST", "path": "/api/v1/certificate-agents/register", "purpose": "registra agente local para certificado A3/token"},
+        {"method": "GET", "path": "/api/v1/certificate-agents", "purpose": "lista agentes locais e status online/offline"},
+        {"method": "GET", "path": "/api/v1/certificate-agents/jobs", "purpose": "lista jobs pendentes, em execucao e concluidos dos agentes locais"},
         {"method": "POST", "path": "/api/v1/certificate-agents/heartbeat", "purpose": "heartbeat autenticado do agente local A3"},
         {"method": "GET/POST", "path": "/api/v1/certificate-agents/jobs/next", "purpose": "agente local busca proximo job de consulta"},
         {"method": "POST", "path": "/api/v1/certificate-agents/jobs/<job_id>/complete", "purpose": "agente local conclui consulta e devolve resultado"},
@@ -55,6 +57,7 @@ def _route_catalog() -> list[dict]:
         {"method": "GET", "path": "/api/v1/datajud/courts", "purpose": "lista aliases oficiais da API Publica DataJud"},
         {"method": "POST", "path": "/api/v1/datajud/search", "purpose": "consulta DataJud por numero CNJ ou Query DSL com search_after"},
         {"method": "POST", "path": "/api/v1/court-connectors/seed-defaults", "purpose": "cadastra conectores padrao para todos os tribunais via ponte local A3"},
+        {"method": "GET", "path": "/api/v1/court-connectors/local-bridge/manifest", "purpose": "instrucoes operacionais da ponte local de tribunais"},
         {"method": "GET/POST", "path": "/api/v1/case-sync-logs", "purpose": "historico das sincronizacoes processuais"},
         {"method": "GET/POST", "path": "/api/v1/case-movements", "purpose": "andamentos importados ou cadastrados"},
         {"method": "GET/POST", "path": "/api/v1/case-documents-synced", "purpose": "documentos importados de tribunais"},
@@ -121,6 +124,7 @@ def health():
             "datajud_configured": bool(appConfig.datajudApiKey),
             "transcription_provider": appConfig.transcriptionProvider,
             "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
+            "local_court_bridge_url": appConfig.localCourtBridgeUrl,
         },
     }
     return r.toJSON()
@@ -172,6 +176,7 @@ def environment():
         "datajud_configured": bool(appConfig.datajudApiKey),
         "transcription_provider": appConfig.transcriptionProvider,
         "whisper_worker_configured": bool(appConfig.whisperWorkerUrl),
+        "local_court_bridge_url": appConfig.localCourtBridgeUrl,
     }
     return r.toJSON()
 

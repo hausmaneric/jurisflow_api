@@ -11,8 +11,11 @@ from source.logic.orb_advanced import (
     export_transcription_note,
     generate_transcription_tasks,
     check_in_appointment,
+    list_certificate_agent_jobs_status,
+    list_certificate_agents_status,
     list_datajud_courts,
     link_lawyer_user,
+    local_court_bridge_manifest,
     list_transcription_segments,
     process_transcription,
     register_certificate_agent,
@@ -69,6 +72,24 @@ def certificate_agent_register():
     if error:
         return error
     r = register_certificate_agent(session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/certificate-agents", methods=["GET"])
+def certificate_agents_list():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = list_certificate_agents_status(session_payload, request.args.to_dict())
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/certificate-agents/jobs", methods=["GET"])
+def certificate_agent_jobs_list():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = list_certificate_agent_jobs_status(session_payload, request.args.to_dict())
     return r.toJSON(), (200 if r.status else 400)
 
 
@@ -159,6 +180,15 @@ def court_connectors_seed_defaults():
     if error:
         return error
     r = seed_default_court_connectors(session_payload, request.get_json(silent=True) or {})
+    return r.toJSON(), (200 if r.status else 400)
+
+
+@app.route("/api/v1/court-connectors/local-bridge/manifest", methods=["GET"])
+def court_connector_local_bridge_manifest():
+    session_payload, error = _session_or_error()
+    if error:
+        return error
+    r = local_court_bridge_manifest(session_payload)
     return r.toJSON(), (200 if r.status else 400)
 
 

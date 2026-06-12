@@ -1117,6 +1117,141 @@ def seed_default_court_connectors(session_payload: dict, payload: dict) -> NXRes
     return r
 
 
+def list_certificate_agents_status(session_payload: dict, payload: dict | None = None) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "integrations.read"):
+        r.make_error(403, "Permissao insuficiente para listar agentes locais")
+        return r
+
+    payload = payload or {}
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        nx.xp_nx.execute(
+            """
+            SELECT id, name, agent_key, status, metadata, last_seen_at, created_at, updated_at,
+                   CASE
+                     WHEN last_seen_at IS NULL THEN 'never_seen'
+                     WHEN last_seen_at < NOW() - INTERVAL '2 minutes' THEN 'offline'
+                     ELSE 'online'
+                   END AS runtime_status
+            FROM certificate_agents
+            WHERE company_id = %s AND deleted_at IS NULL
+            ORDER BY COALESCE(last_seen_at, created_at) DESC
+            LIMIT %s
+            """,
+            (session_payload["company_id"], min(_safe_int(payload.get("limit"), 50), 100)),
+        )
+        rows = [dict(row) for row in nx.xp_nx.fetchall()]
+        r.status = True
+        r.message = "Agentes locais carregados"
+        r.data = rows
+    except Exception as exc:
+        r.make_error(0, "Erro ao listar agentes locais", str(exc))
+    finally:
+        nx.stop()
+    return r
+
+
+def list_certificate_agent_jobs_status(session_payload: dict, payload: dict | None = None) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "sync.read"):
+        r.make_error(403, "Permissao insuficiente para listar jobs dos agentes")
+        return r
+
+    payload = payload or {}
+    params = [session_payload["company_id"]]
+    filters = ["j.company_id = %s", "j.deleted_at IS NULL"]
+    if payload.get("status"):
+        filters.append("j.status = %s")
+        params.append(payload.get("status"))
+    if payload.get("agent_key"):
+        filters.append("j.assigned_agent_key = %s")
+        params.append(payload.get("agent_key"))
+    if payload.get("case_id"):
+        filters.append("j.case_id = %s")
+        params.append(payload.get("case_id"))
+    params.append(min(_safe_int(payload.get("limit"), 50), 100))
+
+    nx = NXDatabaseConnection()
+    opened = nx.active()
+    if opened.error:
+        return opened
+
+    try:
+        nx.xp_nx.execute(
+            f"""
+            SELECT j.id, j.case_id, c.case_number, c.title AS case_title,
+                   j.lawyer_id, l.name AS lawyer_name,
+                   j.certificate_id, lc.certificate_name, lc.certificate_access_mode,
+                   j.connector_id, cc.court_code, cc.court_name, cc.court_system,
+                   j.agent_id, ca.name AS agent_name, j.assigned_agent_key,
+                   j.job_type, j.status, j.error_message, j.locked_at, j.completed_at,
+                   j.created_at, j.updated_at
+            FROM certificate_agent_jobs j
+            LEFT JOIN cases c ON c.id = j.case_id
+            LEFT JOIN lawyers l ON l.id = j.lawyer_id
+            LEFT JOIN lawyer_certificates lc ON lc.id = j.certificate_id
+            LEFT JOIN court_connectors cc ON cc.id = j.connector_id
+            LEFT JOIN certificate_agents ca ON ca.id = j.agent_id
+            WHERE {' AND '.join(filters)}
+            ORDER BY j.created_at DESC
+            LIMIT %s
+            """,
+            tuple(params),
+        )
+        rows = [dict(row) for row in nx.xp_nx.fetchall()]
+        r.status = True
+        r.message = "Jobs dos agentes carregados"
+        r.data = rows
+    except Exception as exc:
+        r.make_error(0, "Erro ao listar jobs dos agentes", str(exc))
+    finally:
+        nx.stop()
+    return r
+
+
+def local_court_bridge_manifest(session_payload: dict) -> NXResult:
+    r = NXResult()
+    if not _has_permission(session_payload, "integrations.read"):
+        r.make_error(403, "Permissao insuficiente para consultar ponte local")
+        return r
+
+    r.status = True
+    r.message = "Manifesto da ponte local carregado"
+    r.data = {
+        "default_endpoint": appConfig.localCourtBridgeUrl,
+        "health_endpoint": appConfig.localCourtBridgeUrl.replace("/tribunal-sync", "/health"),
+        "job_endpoint": "/api/v1/certificate-agents/jobs/next",
+        "completion_endpoint": "/api/v1/certificate-agents/jobs/<job_id>/complete",
+        "supported_certificate_modes": ["file_a1", "token_a3_local", "cloud_provider"],
+        "supported_system_families": [
+            "pje_trabalhista",
+            "pje_federal",
+            "pje_eleitoral",
+            "pje_militar",
+            "tribunal_local_bridge",
+            "stj",
+            "stm",
+        ],
+        "required_local_components": [
+            "certificate_agent",
+            "local_court_bridge",
+            "driver do certificado A1/A3 instalado no computador autorizado",
+            "navegador/driver do sistema do tribunal quando exigido",
+        ],
+        "notes": (
+            "A ponte local roda fora do Railway para acessar certificados A3 em token/pen drive "
+            "e certificados A1 guardados localmente. Ela recebe jobs auditados, consulta o tribunal "
+            "correto e devolve documentos/movimentos para importacao."
+        ),
+    }
+    return r
+
+
 def register_certificate_agent(session_payload: dict, payload: dict) -> NXResult:
     r = NXResult()
     if not _has_permission(session_payload, "integrations.write"):

@@ -66,6 +66,8 @@ O contrato da ponte local deve receber `case_number`, `court_system` e dados do 
 
 Para ponte local, use o valor padrao `http://127.0.0.1:8765/tribunal-sync`, porque quem chama esse endereco e o agente local, nao o Railway.
 
+A implementacao local pronta esta em `local_court_bridge/`. Ela deve ser executada no mesmo computador do certificado ou no ambiente autorizado pelo escritorio. Use `JURISFLOW_LOCAL_BRIDGE_TOKEN` para proteger a ponte local e informe o mesmo valor no `certificate_agent`.
+
 ### Fluxo com agente local A1 ou A3
 
 1. Um administrador registra o agente local:
@@ -120,6 +122,26 @@ Authorization: Bearer <agent_token>
 ```
 
 5. O agente executa a consulta no ambiente local onde o A1 esta acessivel ou onde o token USB/smartcard A3 esta conectado.
+
+Na maquina local, execute dois processos:
+
+```powershell
+cd C:\developer.workspace\Projetos\JurisFlow\API\local_court_bridge
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+$env:JURISFLOW_LOCAL_BRIDGE_TOKEN="token-local-forte"
+python app.py
+```
+
+```powershell
+cd C:\developer.workspace\Projetos\JurisFlow\API\certificate_agent
+$env:JURISFLOW_API_URL="https://web-production-3c57a.up.railway.app/api/v1"
+$env:CERTIFICATE_AGENT_TOKEN="<agent_token>"
+$env:JURISFLOW_LOCAL_BRIDGE_TOKEN="token-local-forte"
+python agent.py
+```
+
+Drivers especificos de tribunal ficam em `local_court_bridge/drivers`. O driver `pje.py` repassa para uma automacao local configurada em `JURISFLOW_PJE_AUTOMATION_URL`, mantendo certificado, PIN e sessao do tribunal fora do Railway.
 
 6. O agente devolve o resultado:
 

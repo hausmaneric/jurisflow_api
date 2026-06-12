@@ -7,6 +7,7 @@ import requests
 API_URL = os.getenv("JURISFLOW_API_URL", "https://web-production-3c57a.up.railway.app/api/v1").rstrip("/")
 TOKEN = os.getenv("CERTIFICATE_AGENT_TOKEN", "")
 INTERVAL_SECONDS = int(os.getenv("CERTIFICATE_AGENT_INTERVAL_SECONDS", "10"))
+LOCAL_BRIDGE_TOKEN = os.getenv("JURISFLOW_LOCAL_BRIDGE_TOKEN", "")
 
 
 def _headers() -> dict:
@@ -49,6 +50,8 @@ def execute_connector(job: dict) -> dict:
 
     headers = request_payload.get("headers") or {}
     body = request_payload.get("body") or {}
+    if LOCAL_BRIDGE_TOKEN and endpoint.startswith(("http://127.0.0.1", "http://localhost")):
+        headers["Authorization"] = f"Bearer {LOCAL_BRIDGE_TOKEN}"
     response = requests.post(endpoint, headers=headers, json=body, timeout=300)
     if response.status_code >= 400:
         raise RuntimeError(f"Conector retornou HTTP {response.status_code}: {response.text[:500]}")
