@@ -2,6 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from source.core.config.config import load_runtime_config
+from source.core.system.migrations import auto_migrate_database
 
 app = Flask(__name__)
 CORS(
@@ -17,5 +18,6 @@ CORS(
 app.config["JSON_AS_ASCII"] = False
 
 load_runtime_config()
+auto_migrate_database()
 
 from source.controller import ctrl_account, ctrl_advanced, ctrl_auth, ctrl_catalog, ctrl_crud, ctrl_files, ctrl_main, ctrl_ocr, ctrl_public, ctrl_reports, ctrl_setup, ctrl_templates  # noqa: E402,F401
