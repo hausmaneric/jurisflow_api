@@ -1,7 +1,40 @@
+import json
+
 from source.core.config.config import appConfig
 from source.core.system.database import NXDatabaseConnection
 from source.core.system.security import hash_password
 from source.core.system.utils import NXResult
+
+
+PLAN_CATALOG = {
+    "starter": {
+        "name": "Starter",
+        "description": "Plano inicial para escritorios em estruturacao",
+        "max_users": 2,
+        "max_cases": 150,
+        "max_storage_mb": 2048,
+        "billing_cycle": "monthly",
+        "monthly_price_brl": 79.90,
+    },
+    "pro": {
+        "name": "Pro",
+        "description": "Plano profissional para escritorios em crescimento",
+        "max_users": 25,
+        "max_cases": 1500,
+        "max_storage_mb": 10240,
+        "billing_cycle": "monthly",
+        "monthly_price_brl": 149.90,
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "description": "Plano completo com automacoes, integracoes e API",
+        "max_users": 250,
+        "max_cases": 10000,
+        "max_storage_mb": 51200,
+        "billing_cycle": "monthly",
+        "monthly_price_brl": 299.90,
+    },
+}
 
 
 def _validate_signup_payload(payload: dict) -> list[str]:
@@ -13,6 +46,50 @@ def _validate_signup_payload(payload: dict) -> list[str]:
         "admin_password",
     ]
     return [field for field in required_fields if not payload.get(field)]
+
+
+def _normalize_plan_code(payload: dict) -> str:
+    raw = (payload.get("plan_code") or payload.get("plan") or payload.get("plan_name") or "enterprise").strip().lower()
+    aliases = {
+        "plano inicial": "starter",
+        "inicial": "starter",
+        "professional": "pro",
+        "profissional": "pro",
+        "empresarial": "enterprise",
+    }
+    return aliases.get(raw, raw if raw in PLAN_CATALOG else "enterprise")
+
+
+def _ensure_plan(nx: NXDatabaseConnection, plan_code: str) -> dict:
+    plan = PLAN_CATALOG[plan_code]
+    nx.xp_nx.execute("SELECT id, name, max_storage_mb FROM plans WHERE LOWER(name) = LOWER(%s) LIMIT 1", (plan["name"],))
+    row = nx.xp_nx.fetchone()
+    if row:
+        nx.xp_nx.execute(
+            """
+            UPDATE plans
+            SET description = %s,
+                max_users = %s,
+                max_cases = %s,
+                max_storage_mb = %s,
+                active = TRUE,
+                updated_at = NOW()
+            WHERE id = %s
+            """,
+            (plan["description"], plan["max_users"], plan["max_cases"], plan["max_storage_mb"], row["id"]),
+        )
+        return {**plan, "id": row["id"]}
+
+    nx.xp_nx.execute(
+        """
+        INSERT INTO plans (name, description, max_users, max_cases, max_storage_mb, active)
+        VALUES (%s, %s, %s, %s, %s, TRUE)
+        RETURNING id
+        """,
+        (plan["name"], plan["description"], plan["max_users"], plan["max_cases"], plan["max_storage_mb"]),
+    )
+    created = nx.xp_nx.fetchone()
+    return {**plan, "id": created["id"]}
 
 
 def _provision_company(payload: dict, success_message: str) -> NXResult:
@@ -28,19 +105,8 @@ def _provision_company(payload: dict, success_message: str) -> NXResult:
         return opened
 
     try:
-        nx.xp_nx.execute(
-            """
-            INSERT INTO plans (name, description, max_users, max_cases, max_storage_mb, active)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-            RETURNING id
-            """,
-            ("Plano Inicial", "Plano padrao do bootstrap inicial", 10, 300, 2048, True),
-        )
-        plan_row = nx.xp_nx.fetchone()
-        if not plan_row:
-            nx.xp_nx.execute("SELECT id FROM plans ORDER BY created_at ASC LIMIT 1")
-            plan_row = nx.xp_nx.fetchone()
+        plan_code = _normalize_plan_code(payload)
+        plan_row = _ensure_plan(nx, plan_code)
 
         nx.xp_nx.execute(
             """
@@ -115,9 +181,45 @@ def _provision_company(payload: dict, success_message: str) -> NXResult:
                 payload.get("billing_email") or payload.get("company_email"),
                 payload.get("timezone") or "America/Sao_Paulo",
                 payload.get("locale") or "pt-BR",
-                payload.get("storage_limit_mb") or 2048,
+                payload.get("storage_limit_mb") or plan_row["max_storage_mb"],
                 0,
-                "{}",
+                json.dumps(
+                    {
+                        "office_oab": payload.get("office_oab") or "",
+                        "office_address": payload.get("office_address") or "",
+                        "office_number": payload.get("office_number") or "",
+                        "office_complement": payload.get("office_complement") or "",
+                        "office_city": payload.get("office_city") or "",
+                        "office_state": payload.get("office_state") or "",
+                        "office_postal_code": payload.get("office_postal_code") or "",
+                    }
+                ),
+            ),
+        )
+
+        nx.xp_nx.execute(
+            """
+            INSERT INTO company_subscriptions (
+                company_id,
+                plan_id,
+                status,
+                billing_cycle,
+                current_period_start,
+                current_period_end,
+                billing_data
+            )
+            VALUES (%s, %s, 'active', %s, NOW(), NOW() + INTERVAL '30 days', %s::jsonb)
+            """,
+            (
+                company["id"],
+                plan_row["id"],
+                plan_row["billing_cycle"],
+                json.dumps(
+                    {
+                        "plan_code": plan_code,
+                        "monthly_price_brl": plan_row["monthly_price_brl"],
+                    }
+                ),
             ),
         )
 
@@ -130,6 +232,8 @@ def _provision_company(payload: dict, success_message: str) -> NXResult:
             "admin_user_id": str(user["id"]),
             "company_code": payload["company_code"],
             "admin_email": payload["admin_email"],
+            "plan_code": plan_code,
+            "plan_name": plan_row["name"],
         }
     except Exception as exc:
         nx.conn_nx.rollback()

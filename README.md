@@ -34,6 +34,8 @@ As pastas abaixo existem para manter o mesmo padrao estrutural do projeto de ref
 - `POST /api/v1/public/signup`
 - `POST /api/v1/setup/bootstrap`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/google/start`
+- `GET /api/v1/auth/google/callback`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/me`
@@ -64,6 +66,17 @@ As pastas abaixo existem para manter o mesmo padrao estrutural do projeto de ref
 
 Em producao, prefira `JURISFLOW_DATABASE_URL` fornecida pelo PostgreSQL do Railway.
 Para arquivos, certificados A1 e audios de transcricao, use `JURISFLOW_STORAGE_MODE=s3` com bucket privado S3/R2/MinIO. Veja `docs/storage-seguro.md`.
+
+### Login com Google
+
+Configure no servico da API:
+
+- `JURISFLOW_WEB_BASE_URL`: URL publica da aplicacao Web, sem barra final.
+- `JURISFLOW_GOOGLE_CLIENT_ID`: Client ID do OAuth 2.0.
+- `JURISFLOW_GOOGLE_CLIENT_SECRET`: Client Secret do OAuth 2.0.
+- `JURISFLOW_GOOGLE_REDIRECT_URI`: `https://SEU-DOMINIO-DA-API/api/v1/auth/google/callback`.
+
+Cadastre exatamente o mesmo `JURISFLOW_GOOGLE_REDIRECT_URI` em "URIs de redirecionamento autorizados" no Google Cloud Console. O e-mail Google precisa existir previamente como usuario ativo no escritorio informado.
 
 ## Integracoes de producao
 

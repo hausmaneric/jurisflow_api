@@ -45,6 +45,10 @@ class AppConfig:
     transcriptionProvider: str = "manual"
     whisperWorkerUrl: str = ""
     whisperWorkerToken: str = ""
+    webBaseUrl: str = ""
+    googleClientId: str = ""
+    googleClientSecret: str = ""
+    googleRedirectUri: str = ""
 
 
 appConfig = AppConfig()
@@ -89,6 +93,10 @@ def load_runtime_config() -> None:
         "JURISFLOW_TRANSCRIPTION_PROVIDER": os.getenv("JURISFLOW_TRANSCRIPTION_PROVIDER"),
         "JURISFLOW_WHISPER_WORKER_URL": os.getenv("JURISFLOW_WHISPER_WORKER_URL"),
         "JURISFLOW_WHISPER_WORKER_TOKEN": os.getenv("JURISFLOW_WHISPER_WORKER_TOKEN"),
+        "JURISFLOW_WEB_BASE_URL": os.getenv("JURISFLOW_WEB_BASE_URL"),
+        "JURISFLOW_GOOGLE_CLIENT_ID": os.getenv("JURISFLOW_GOOGLE_CLIENT_ID"),
+        "JURISFLOW_GOOGLE_CLIENT_SECRET": os.getenv("JURISFLOW_GOOGLE_CLIENT_SECRET"),
+        "JURISFLOW_GOOGLE_REDIRECT_URI": os.getenv("JURISFLOW_GOOGLE_REDIRECT_URI"),
     }
 
     for key, value in env_map.items():
@@ -125,3 +133,7 @@ def load_runtime_config() -> None:
     appConfig.transcriptionProvider = runtime_data.get("JURISFLOW_TRANSCRIPTION_PROVIDER", appConfig.transcriptionProvider)
     appConfig.whisperWorkerUrl = runtime_data.get("JURISFLOW_WHISPER_WORKER_URL", appConfig.whisperWorkerUrl)
     appConfig.whisperWorkerToken = runtime_data.get("JURISFLOW_WHISPER_WORKER_TOKEN", appConfig.whisperWorkerToken)
+    appConfig.webBaseUrl = runtime_data.get("JURISFLOW_WEB_BASE_URL", appConfig.webBaseUrl)
+    appConfig.googleClientId = runtime_data.get("JURISFLOW_GOOGLE_CLIENT_ID", appConfig.googleClientId)
+    appConfig.googleClientSecret = runtime_data.get("JURISFLOW_GOOGLE_CLIENT_SECRET", appConfig.googleClientSecret)
+    appConfig.googleRedirectUri = runtime_data.get("JURISFLOW_GOOGLE_REDIRECT_URI", appConfig.googleRedirectUri)
