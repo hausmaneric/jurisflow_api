@@ -82,6 +82,14 @@ def _web_google_callback_url() -> str:
     return "/auth/google/callback"
 
 
+def _google_return_url(requested_url: str | None = None) -> str:
+    web_callback = _web_google_callback_url()
+    requested = (requested_url or "").strip()
+    if requested == "jurisflow://auth/google":
+        return requested
+    return web_callback
+
+
 def _redirect_with_params(base_url: str, params: dict) -> str:
     separator = "&" if "?" in base_url else "?"
     return f"{base_url}{separator}{urlencode(params)}"
@@ -162,7 +170,8 @@ def start_google_oauth(payload: dict) -> NXResult:
     if not company_code:
         r.make_error(0, "company_code e obrigatorio para entrar com Google")
         return r
-    if not appConfig.googleClientId or not appConfig.googleClientSecret or not redirect_uri or not appConfig.webBaseUrl:
+    return_url = _google_return_url(payload.get("return_url"))
+    if not appConfig.googleClientId or not appConfig.googleClientSecret or not redirect_uri:
         r.make_error(
             0,
             "Login com Google nao configurado",
@@ -174,6 +183,7 @@ def start_google_oauth(payload: dict) -> NXResult:
         {
             "scope": "google_oauth_state",
             "company_code": company_code,
+            "return_url": return_url,
             "nonce": str(uuid4()),
         },
         expires_in_hours=1,
@@ -212,7 +222,7 @@ def complete_google_oauth(args: dict) -> str:
             {"error": "oauth_state", "message": "Sessao do Google expirada. Tente novamente."},
         )
 
-    return_url = _web_google_callback_url()
+    return_url = _google_return_url(state.get("return_url"))
     if state.get("scope") != "google_oauth_state" or not code:
         return _redirect_with_params(return_url, {"error": "oauth_callback", "message": "Retorno do Google invalido."})
 
