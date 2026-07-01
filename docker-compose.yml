@@ -1,0 +1,66 @@
+services:
+  api:
+    image: python:3.12-slim
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt
+      && gunicorn app:app --bind 0.0.0.0:8080 --timeout 180"
+    volumes:
+      - .:/app
+    ports:
+      - "8080:8080"
+    environment:
+      JURISFLOW_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/jurisflow
+      JURISFLOW_DB_SSLMODE: disable
+      JURISFLOW_SECRET_KEY: local-dev-secret
+      JURISFLOW_SETUP_KEY: local-setup
+      JURISFLOW_PUBLIC_BASE_URL: http://localhost:8080
+      JURISFLOW_STORAGE_MODE: local
+      JURISFLOW_STORAGE_ROOT: storage
+      JURISFLOW_DATAJUD_BASE_URL: https://api-publica.datajud.cnj.jus.br
+      JURISFLOW_WHISPER_WORKER_URL: http://transcription-worker:8081
+      JURISFLOW_WHISPER_WORKER_TOKEN: local-whisper-token
+      JURISFLOW_SERVER_COURT_CONNECTOR_URL: http://server-court-connector:8082/tribunal-sync
+      JURISFLOW_SERVER_COURT_CONNECTOR_TOKEN: local-court-token
+      JURISFLOW_TRANSCRIPTION_PROVIDER: whisper_worker
+    depends_on:
+      - postgres
+      - transcription-worker
+      - server-court-connector
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: jurisflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - jurisflow-postgres:/var/lib/postgresql/data
+
+  transcription-worker:
+    build:
+      context: ./transcription_worker
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: 8081
+      WHISPER_WORKER_TOKEN: local-whisper-token
+      WHISPER_MODEL_SIZE: medium
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      WHISPER_ENABLE_DIARIZATION: "false"
+
+  server-court-connector:
+    build:
+      context: ./server_court_connector
+    ports:
+      - "8082:8082"
+    environment:
+      PORT: 8082
+      JURISFLOW_COURT_CONNECTOR_TOKEN: local-court-token
+      JURISFLOW_SERVER_PJE_MIDDLEWARE_URL:
+
+volumes:
+  jurisflow-postgres:

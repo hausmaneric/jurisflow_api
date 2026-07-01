@@ -62,6 +62,11 @@ def load_runtime_config() -> None:
     if config_path.exists():
         runtime_data = json.loads(config_path.read_text(encoding="utf-8") or "{}")
 
+    explicit_transcription_provider = bool(
+        os.getenv("JURISFLOW_TRANSCRIPTION_PROVIDER")
+        or runtime_data.get("JURISFLOW_TRANSCRIPTION_PROVIDER")
+    )
+
     env_map = {
         "JURISFLOW_API_NAME": os.getenv("JURISFLOW_API_NAME"),
         "JURISFLOW_API_VERSION": os.getenv("JURISFLOW_API_VERSION"),
@@ -133,6 +138,8 @@ def load_runtime_config() -> None:
     appConfig.transcriptionProvider = runtime_data.get("JURISFLOW_TRANSCRIPTION_PROVIDER", appConfig.transcriptionProvider)
     appConfig.whisperWorkerUrl = runtime_data.get("JURISFLOW_WHISPER_WORKER_URL", appConfig.whisperWorkerUrl)
     appConfig.whisperWorkerToken = runtime_data.get("JURISFLOW_WHISPER_WORKER_TOKEN", appConfig.whisperWorkerToken)
+    if appConfig.whisperWorkerUrl and not explicit_transcription_provider:
+        appConfig.transcriptionProvider = "whisper_worker"
     appConfig.webBaseUrl = runtime_data.get("JURISFLOW_WEB_BASE_URL", appConfig.webBaseUrl)
     appConfig.googleClientId = runtime_data.get("JURISFLOW_GOOGLE_CLIENT_ID", appConfig.googleClientId)
     appConfig.googleClientSecret = runtime_data.get("JURISFLOW_GOOGLE_CLIENT_SECRET", appConfig.googleClientSecret)

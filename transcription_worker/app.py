@@ -8,6 +8,9 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
+_WHISPER_MODEL = None
+_WHISPER_MODEL_KEY = None
+
 
 def _safe_float(value, fallback=0.0):
     try:
@@ -40,17 +43,29 @@ def _download_file(file_url: str) -> Path:
     return Path(handle.name)
 
 
-def _transcribe_with_whisper(file_path: Path, payload: dict) -> list[dict]:
+def _get_whisper_model():
+    global _WHISPER_MODEL, _WHISPER_MODEL_KEY
+
     from faster_whisper import WhisperModel
 
     model_size = os.getenv("WHISPER_MODEL_SIZE", "medium")
     device = os.getenv("WHISPER_DEVICE", "cpu")
     compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-    language = (payload.get("language") or "pt-BR").split("-")[0]
+    key = (model_size, device, compute_type)
+
+    if _WHISPER_MODEL is None or _WHISPER_MODEL_KEY != key:
+        _WHISPER_MODEL = WhisperModel(model_size, device=device, compute_type=compute_type)
+        _WHISPER_MODEL_KEY = key
+
+    return _WHISPER_MODEL
+
+
+def _transcribe_with_whisper(file_path: Path, payload: dict) -> list[dict]:
+    language = (payload.get("language") or "pt-BR").split("-")[0].lower()
     vocabulary = payload.get("vocabulary") or []
     initial_prompt = ", ".join(str(item) for item in vocabulary if item)
 
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    model = _get_whisper_model()
     segments, info = model.transcribe(
         str(file_path),
         language=language,
@@ -104,6 +119,20 @@ def _apply_optional_diarization(file_path: Path, segments: list[dict]) -> list[d
 @app.get("/health")
 def health():
     return jsonify({"status": "ok", "provider": "faster-whisper"})
+
+
+@app.get("/ready")
+def ready():
+    return jsonify(
+        {
+            "status": "ready",
+            "provider": "faster-whisper",
+            "model_size": os.getenv("WHISPER_MODEL_SIZE", "medium"),
+            "device": os.getenv("WHISPER_DEVICE", "cpu"),
+            "compute_type": os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
+            "diarization": os.getenv("WHISPER_ENABLE_DIARIZATION", "false").lower() == "true",
+        }
+    )
 
 
 @app.post("/transcribe")

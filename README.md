@@ -112,3 +112,13 @@ Um worker pronto para deploy esta em `transcription_worker/`, usando `faster-whi
 - `server_court_connector/`: conector remoto para A1/cofre, certificado em nuvem e middleware contratado de tribunal.
 - `transcription_worker/`: worker Whisper/Pyannote para transcricao sem OpenAI.
 - `local_court_bridge/`: fallback local para A3 USB/token fisico.
+
+## Operacao completa
+
+Para subir a pilha com API, PostgreSQL, worker de transcricao e conector remoto em ambiente local:
+
+```bash
+docker compose up --build
+```
+
+Para Railway/producao, use `.env.production.example` como referencia e veja `docs/operacao-producao.md`.

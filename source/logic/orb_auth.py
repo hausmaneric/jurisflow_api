@@ -8,7 +8,7 @@ from source.core.config.config import appConfig
 from source.core.system.database import NXDatabaseConnection
 from source.core.system.security import decode_token, encode_token, hash_password, verify_password
 from source.core.system.utils import NXResult
-from source.data.sql.sql_auth import SQL_ROLE_PERMISSIONS, SQL_USER_BY_COMPANY_EMAIL
+from source.data.sql.sql_auth import SQL_ROLE_PERMISSIONS, SQL_USER_BY_COMPANY_EMAIL, SQL_USERS_BY_EMAIL
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -123,8 +123,8 @@ def login_user(payload: dict) -> NXResult:
     email = (payload.get("email") or "").strip()
     password = payload.get("password") or ""
 
-    if not company_code or not email or not password:
-        r.make_error(0, "company_code, email e password sao obrigatorios")
+    if not email or not password:
+        r.make_error(0, "email e password sao obrigatorios")
         return r
 
     nx = NXDatabaseConnection()
@@ -133,8 +133,16 @@ def login_user(payload: dict) -> NXResult:
         return opened
 
     try:
-        nx.xp_nx.execute(SQL_USER_BY_COMPANY_EMAIL, (company_code, email))
-        user = nx.xp_nx.fetchone()
+        if company_code:
+            nx.xp_nx.execute(SQL_USER_BY_COMPANY_EMAIL, (company_code, email))
+            user = nx.xp_nx.fetchone()
+        else:
+            nx.xp_nx.execute(SQL_USERS_BY_EMAIL, (email,))
+            users = nx.xp_nx.fetchall()
+            if len(users) > 1:
+                r.make_error(400, "Informe o codigo do escritorio para esta conta")
+                return r
+            user = users[0] if users else None
         if not user or not user["active"]:
             r.make_error(401, "Usuario nao localizado ou inativo")
             return r
